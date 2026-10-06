@@ -21,25 +21,29 @@ const fs = require("fs");
 const path = require("path");
 
 /* =========================================================
-   ENVIRONMENT
+   CONFIG
 ========================================================= */
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
+const EMBED_COLOUR = "#2F4DA8";
+const RSA_LOGO = "<:Our_Logo:1557149633623363594>";
+const BOT_VERSION = "4.0.0";
+
 if (!TOKEN) {
-    console.error("❌ DISCORD_TOKEN is missing.");
+    console.error("DISCORD_TOKEN is missing.");
     process.exit(1);
 }
 
 if (!CLIENT_ID) {
-    console.error("❌ CLIENT_ID is missing.");
+    console.error("CLIENT_ID is missing.");
     process.exit(1);
 }
 
 if (!GUILD_ID) {
-    console.error("❌ GUILD_ID is missing.");
+    console.error("GUILD_ID is missing.");
     process.exit(1);
 }
 
@@ -68,29 +72,18 @@ const client = new Client({
 const DATA_DIR = path.join(__dirname, "data");
 
 if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, {
-        recursive: true
-    });
+    fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-const WARNINGS_FILE =
-    path.join(DATA_DIR, "warnings.json");
+const WARNINGS_FILE = path.join(DATA_DIR, "warnings.json");
+const CONFIG_FILE = path.join(DATA_DIR, "config.json");
 
-const CONFIG_FILE =
-    path.join(DATA_DIR, "config.json");
-
-function load(file, fallback) {
-
+function loadJSON(file, fallback) {
     try {
-
         if (!fs.existsSync(file)) {
             fs.writeFileSync(
                 file,
-                JSON.stringify(
-                    fallback,
-                    null,
-                    2
-                )
+                JSON.stringify(fallback, null, 2)
             );
 
             return fallback;
@@ -99,51 +92,82 @@ function load(file, fallback) {
         return JSON.parse(
             fs.readFileSync(file, "utf8")
         );
-
     } catch (error) {
-
-        console.error(
-            `Failed to load ${file}:`,
-            error
-        );
-
+        console.error(`Could not load ${file}:`, error);
         return fallback;
     }
 }
 
-function save(file, data) {
-
+function saveJSON(file, data) {
     try {
-
         fs.writeFileSync(
             file,
-            JSON.stringify(
-                data,
-                null,
-                2
-            )
+            JSON.stringify(data, null, 2)
         );
-
     } catch (error) {
-
-        console.error(
-            `Failed to save ${file}:`,
-            error
-        );
+        console.error(`Could not save ${file}:`, error);
     }
 }
 
-const warnings =
-    load(WARNINGS_FILE, {});
-
-const configs =
-    load(CONFIG_FILE, {});
-
-/* =========================================================
-   EMBED SESSIONS
-========================================================= */
+const warnings = loadJSON(WARNINGS_FILE, {});
+const configs = loadJSON(CONFIG_FILE, {});
 
 const embedSessions = new Map();
+
+/* =========================================================
+   EMBED HELPERS
+========================================================= */
+
+function brandedTitle(title) {
+    return `${RSA_LOGO} ${title}`;
+}
+
+function createEmbed(options = {}) {
+    const embed = new EmbedBuilder()
+        .setColor(EMBED_COLOUR);
+
+    if (options.title) {
+        embed.setTitle(
+            brandedTitle(options.title)
+        );
+    }
+
+    if (options.description) {
+        embed.setDescription(
+            options.description
+        );
+    }
+
+    if (options.fields) {
+        embed.addFields(
+            options.fields
+        );
+    }
+
+    if (options.thumbnail) {
+        embed.setThumbnail(
+            options.thumbnail
+        );
+    }
+
+    if (options.image) {
+        embed.setImage(
+            options.image
+        );
+    }
+
+    if (options.footer) {
+        embed.setFooter({
+            text: options.footer
+        });
+    }
+
+    if (options.timestamp !== false) {
+        embed.setTimestamp();
+    }
+
+    return embed;
+}
 
 /* =========================================================
    COMMANDS
@@ -161,11 +185,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("botinfo")
-        .setDescription("View RSA Administrator information."),
+        .setDescription("View information about RSA Administrator."),
 
     new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("View server information."),
+        .setDescription("View information about this server."),
 
     new SlashCommandBuilder()
         .setName("userinfo")
@@ -189,7 +213,7 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("reason")
-                .setDescription("Reason.")
+                .setDescription("Reason for the ban.")
                 .setRequired(false)
         ),
 
@@ -205,7 +229,7 @@ const commands = [
         .addStringOption(option =>
             option
                 .setName("reason")
-                .setDescription("Reason.")
+                .setDescription("Reason for the kick.")
                 .setRequired(false)
         ),
 
@@ -221,7 +245,7 @@ const commands = [
         .addIntegerOption(option =>
             option
                 .setName("minutes")
-                .setDescription("Timeout duration in minutes.")
+                .setDescription("Timeout duration.")
                 .setMinValue(1)
                 .setMaxValue(40320)
                 .setRequired(true)
@@ -285,7 +309,7 @@ const commands = [
         .addIntegerOption(option =>
             option
                 .setName("amount")
-                .setDescription("Number of messages.")
+                .setDescription("Number of messages to delete.")
                 .setMinValue(1)
                 .setMaxValue(100)
                 .setRequired(true)
@@ -301,11 +325,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Change channel slowmode.")
+        .setDescription("Set the channel slowmode.")
         .addIntegerOption(option =>
             option
                 .setName("seconds")
-                .setDescription("Slowmode in seconds.")
+                .setDescription("Slowmode duration.")
                 .setMinValue(0)
                 .setMaxValue(21600)
                 .setRequired(true)
@@ -363,17 +387,11 @@ const commands = [
                 .setName("message")
                 .setDescription("Announcement message.")
                 .setRequired(true)
-        )
-        .addStringOption(option =>
-            option
-                .setName("colour")
-                .setDescription("Hex colour, e.g. #315B9A.")
-                .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("embed")
-        .setDescription("Open the RSA embed creator."),
+        .setDescription("Open the interactive embed creator."),
 
     new SlashCommandBuilder()
         .setName("setlogs")
@@ -381,27 +399,26 @@ const commands = [
         .addChannelOption(option =>
             option
                 .setName("channel")
-                .setDescription("Logging channel.")
+                .setDescription("Channel to receive logs.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("logs")
-        .setDescription("View the current log channel.")
+        .setDescription("View the configured log channel.")
 
 ].map(command => command.toJSON());
 
 /* =========================================================
-   REGISTER
+   REGISTER COMMANDS
 ========================================================= */
 
 async function registerCommands() {
-
     const rest = new REST({
         version: "10"
     }).setToken(TOKEN);
 
-    console.log("Registering RSA Administrator commands...");
+    console.log("Registering commands...");
 
     await rest.put(
         Routes.applicationGuildCommands(
@@ -413,32 +430,21 @@ async function registerCommands() {
         }
     );
 
-    console.log("✅ Slash commands registered.");
+    console.log("Commands registered.");
 }
 
 /* =========================================================
    PERMISSIONS
 ========================================================= */
 
-function hasPermission(
-    interaction,
-    permission
-) {
-
+function hasPermission(interaction, permission) {
     return interaction.member.permissions.has(
         permission
     );
-
 }
 
-function canModerate(
-    interaction,
-    member
-) {
-
-    if (!member) {
-        return false;
-    }
+function canModerate(interaction, member) {
+    if (!member) return false;
 
     if (member.id === interaction.user.id) {
         return false;
@@ -452,7 +458,6 @@ function canModerate(
         interaction.member.id !==
         interaction.guild.ownerId
     ) {
-
         if (
             member.roles.highest.position >=
             interaction.member.roles.highest.position
@@ -471,11 +476,6 @@ function canModerate(
     return true;
 }
 
-function validHex(value) {
-
-    return /^#[0-9A-F]{6}$/i.test(value);
-}
-
 /* =========================================================
    LOGGING
 ========================================================= */
@@ -483,12 +483,9 @@ function validHex(value) {
 async function logAction(
     guild,
     title,
-    description,
-    colour = "#315B9A"
+    description
 ) {
-
-    const config =
-        configs[guild.id];
+    const config = configs[guild.id];
 
     if (!config?.logChannel) {
         return;
@@ -503,64 +500,49 @@ async function logAction(
         return;
     }
 
-    const embed =
-        new EmbedBuilder()
-            .setTitle(title)
-            .setDescription(description)
-            .setColor(colour)
-            .setTimestamp()
-            .setFooter({
-                text:
-                    "RSA Administrator"
-            });
+    const embed = createEmbed({
+        title,
+        description
+    });
 
     await channel.send({
         embeds: [embed]
     }).catch(() => {});
-
 }
 
 /* =========================================================
    READY
 ========================================================= */
 
-client.once(
-    "ready",
-    async () => {
+client.once("ready", async () => {
 
-        console.log(
-            `✅ Logged in as ${client.user.tag}`
+    console.log(
+        `Logged in as ${client.user.tag}`
+    );
+
+    client.user.setPresence({
+        status: "online",
+        activities: [
+            {
+                name: "Roblox Schools Association",
+                type: 3
+            }
+        ]
+    });
+
+    try {
+        await registerCommands();
+    } catch (error) {
+        console.error(
+            "Command registration failed:",
+            error
         );
-
-        client.user.setPresence({
-            status: "online",
-            activities: [
-                {
-                    name:
-                        "Roblox Schools Association",
-                    type: 3
-                }
-            ]
-        });
-
-        try {
-
-            await registerCommands();
-
-        } catch (error) {
-
-            console.error(
-                "❌ Command registration failed:",
-                error
-            );
-
-        }
-
     }
-);
+
+});
 
 /* =========================================================
-   COMMAND INTERACTION
+   INTERACTIONS
 ========================================================= */
 
 client.on(
@@ -572,27 +554,25 @@ client.on(
             if (
                 interaction.isChatInputCommand()
             ) {
-
-                await commandHandler(
+                await handleCommand(
                     interaction
                 );
+            }
 
-            } else if (
+            else if (
                 interaction.isButton()
             ) {
-
-                await buttonHandler(
+                await handleButton(
                     interaction
                 );
+            }
 
-            } else if (
+            else if (
                 interaction.isModalSubmit()
             ) {
-
-                await modalHandler(
+                await handleModal(
                     interaction
                 );
-
             }
 
         } catch (error) {
@@ -602,9 +582,9 @@ client.on(
                 error
             );
 
-            const message = {
+            const response = {
                 content:
-                    "❌ An unexpected error occurred.",
+                    "An unexpected error occurred.",
                 ephemeral: true
             };
 
@@ -612,19 +592,14 @@ client.on(
                 interaction.replied ||
                 interaction.deferred
             ) {
-
                 await interaction.followUp(
-                    message
+                    response
                 ).catch(() => {});
-
             } else {
-
                 await interaction.reply(
-                    message
+                    response
                 ).catch(() => {});
-
             }
-
         }
 
     }
@@ -634,138 +609,168 @@ client.on(
    COMMAND HANDLER
 ========================================================= */
 
-async function commandHandler(
-    interaction
-) {
+async function handleCommand(interaction) {
 
     const command =
         interaction.commandName;
 
-    /* ---------- PING ---------- */
+    /* HELP */
 
-    if (command === "ping") {
+    if (command === "help") {
 
-        return interaction.reply({
-            content:
-                `🏓 **Pong!** ${client.ws.ping}ms`,
-            ephemeral: true
+        const embed = createEmbed({
+            title: "RSA Administrator",
+            description:
+                "Administration and moderation tools for the Roblox Schools Association.",
+            fields: [
+                {
+                    name: "Moderation",
+                    value:
+                        "`/ban` `/kick` `/timeout` `/untimeout` `/warn` `/warnings` `/clearwarnings` `/purge`"
+                },
+                {
+                    name: "Management",
+                    value:
+                        "`/lock` `/unlock` `/slowmode` `/role` `/announce`"
+                },
+                {
+                    name: "Information",
+                    value:
+                        "`/serverinfo` `/userinfo` `/botinfo` `/ping`"
+                },
+                {
+                    name: "Tools",
+                    value:
+                        "`/embed` `/setlogs` `/logs`"
+                }
+            ],
+            footer: "Roblox Schools Association"
         });
-
-    }
-
-    /* ---------- BOT INFO ---------- */
-
-    if (command === "botinfo") {
-
-        const embed =
-            new EmbedBuilder()
-                .setTitle(
-                    "RSA Administrator"
-                )
-                .setDescription(
-                    "The official administration bot for the Roblox Schools Association."
-                )
-                .addFields(
-                    {
-                        name: "Version",
-                        value: "3.0.0",
-                        inline: true
-                    },
-                    {
-                        name: "Latency",
-                        value:
-                            `${client.ws.ping}ms`,
-                        inline: true
-                    },
-                    {
-                        name: "Servers",
-                        value:
-                            String(
-                                client.guilds.cache.size
-                            ),
-                        inline: true
-                    }
-                )
-                .setColor("#315B9A")
-                .setFooter({
-                    text:
-                        "Roblox Schools Association"
-                });
 
         return interaction.reply({
             embeds: [embed],
             ephemeral: true
         });
-
     }
 
-    /* ---------- SERVER INFO ---------- */
+    /* PING */
+
+    if (command === "ping") {
+
+        const embed = createEmbed({
+            title: "Bot Status",
+            description:
+                `Latency: **${client.ws.ping}ms**`
+        });
+
+        return interaction.reply({
+            embeds: [embed],
+            ephemeral: true
+        });
+    }
+
+    /* BOT INFO */
+
+    if (command === "botinfo") {
+
+        const embed = createEmbed({
+            title: "RSA Administrator",
+            description:
+                "Administration bot for the Roblox Schools Association.",
+            fields: [
+                {
+                    name: "Version",
+                    value: BOT_VERSION,
+                    inline: true
+                },
+                {
+                    name: "Latency",
+                    value:
+                        `${client.ws.ping}ms`,
+                    inline: true
+                },
+                {
+                    name: "Servers",
+                    value:
+                        `${client.guilds.cache.size}`,
+                    inline: true
+                }
+            ],
+            footer:
+                "Roblox Schools Association"
+        });
+
+        return interaction.reply({
+            embeds: [embed],
+            ephemeral: true
+        });
+    }
+
+    /* SERVER INFO */
 
     if (command === "serverinfo") {
 
         const guild =
             interaction.guild;
 
-        const embed =
-            new EmbedBuilder()
-                .setTitle(guild.name)
-                .setThumbnail(
-                    guild.iconURL({
-                        size: 256
-                    })
-                )
-                .addFields(
-                    {
-                        name: "Members",
-                        value:
-                            `${guild.memberCount}`,
-                        inline: true
-                    },
-                    {
-                        name: "Channels",
-                        value:
-                            `${guild.channels.cache.size}`,
-                        inline: true
-                    },
-                    {
-                        name: "Roles",
-                        value:
-                            `${guild.roles.cache.size}`,
-                        inline: true
-                    },
-                    {
-                        name: "Owner",
-                        value:
-                            `<@${guild.ownerId}>`,
-                        inline: true
-                    },
-                    {
-                        name: "Created",
-                        value:
-                            `<t:${Math.floor(
-                                guild.createdTimestamp /
-                                1000
-                            )}:D>`,
-                        inline: true
-                    }
-                )
-                .setColor("#315B9A");
+        const embed = createEmbed({
+            title: "Server Information",
+            thumbnail:
+                guild.iconURL({
+                    size: 256
+                }),
+            fields: [
+                {
+                    name: "Server",
+                    value: guild.name
+                },
+                {
+                    name: "Members",
+                    value:
+                        `${guild.memberCount}`,
+                    inline: true
+                },
+                {
+                    name: "Channels",
+                    value:
+                        `${guild.channels.cache.size}`,
+                    inline: true
+                },
+                {
+                    name: "Roles",
+                    value:
+                        `${guild.roles.cache.size}`,
+                    inline: true
+                },
+                {
+                    name: "Owner",
+                    value:
+                        `<@${guild.ownerId}>`,
+                    inline: true
+                },
+                {
+                    name: "Created",
+                    value:
+                        `<t:${Math.floor(
+                            guild.createdTimestamp / 1000
+                        )}:D>`,
+                    inline: true
+                }
+            ]
+        });
 
         return interaction.reply({
             embeds: [embed],
             ephemeral: true
         });
-
     }
 
-    /* ---------- USER INFO ---------- */
+    /* USER INFO */
 
     if (command === "userinfo") {
 
         const user =
-            interaction.options.getUser(
-                "user"
-            ) ||
+            interaction.options.getUser("user") ||
             interaction.user;
 
         const member =
@@ -773,75 +778,72 @@ async function commandHandler(
                 .fetch(user.id)
                 .catch(() => null);
 
-        const roles =
-            member
-                ? member.roles.cache
-                    .filter(
-                        role =>
-                            role.id !==
-                            interaction.guild.id
-                    )
-                    .sort(
-                        (a, b) =>
-                            b.position -
-                            a.position
-                    )
-                    .map(
-                        role =>
-                            role.toString()
-                    )
-                    .slice(0, 15)
-                    .join(" ")
-                : "Not in server";
+        const roles = member
+            ? member.roles.cache
+                .filter(
+                    role =>
+                        role.id !==
+                        interaction.guild.id
+                )
+                .sort(
+                    (a, b) =>
+                        b.position -
+                        a.position
+                )
+                .map(
+                    role =>
+                        role.toString()
+                )
+                .slice(0, 15)
+                .join(" ") ||
+                "No roles"
+            : "Not in server";
 
-        const embed =
-            new EmbedBuilder()
-                .setTitle(
-                    user.tag
-                )
-                .setThumbnail(
-                    user.displayAvatarURL({
-                        size: 256
-                    })
-                )
-                .addFields(
-                    {
-                        name: "User ID",
-                        value: user.id
-                    },
-                    {
-                        name: "Account Created",
-                        value:
-                            `<t:${Math.floor(
-                                user.createdTimestamp /
-                                1000
+        const embed = createEmbed({
+            title: "User Information",
+            thumbnail:
+                user.displayAvatarURL({
+                    size: 256
+                }),
+            fields: [
+                {
+                    name: "User",
+                    value: user.tag
+                },
+                {
+                    name: "User ID",
+                    value: user.id
+                },
+                {
+                    name: "Account Created",
+                    value:
+                        `<t:${Math.floor(
+                            user.createdTimestamp / 1000
+                        )}:F>`
+                },
+                {
+                    name: "Joined Server",
+                    value:
+                        member
+                            ? `<t:${Math.floor(
+                                member.joinedTimestamp / 1000
                             )}:F>`
-                    },
-                    {
-                        name: "Server Joined",
-                        value:
-                            member
-                                ? `<t:${Math.floor(
-                                    member.joinedTimestamp /
-                                    1000
-                                )}:F>`
-                                : "Not in server"
-                    },
-                    {
-                        name: "Roles",
-                        value: roles
-                    }
-                )
-                .setColor("#315B9A");
+                            : "Not in server"
+                },
+                {
+                    name: "Roles",
+                    value: roles
+                }
+            ]
+        });
 
         return interaction.reply({
             embeds: [embed],
             ephemeral: true
         });
-
     }
 
-    /* ---------- BAN ---------- */
+    /* BAN */
 
     if (command === "ban") {
 
@@ -853,7 +855,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Ban Members** permission.",
+                    "You need the Ban Members permission.",
                 ephemeral: true
             });
         }
@@ -881,32 +883,28 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You cannot moderate this member because of role hierarchy.",
+                    "You cannot moderate this member because of the role hierarchy.",
                 ephemeral: true
             });
         }
 
         await interaction.guild.members.ban(
             user.id,
-            {
-                reason
-            }
+            { reason }
         );
 
         await logAction(
             interaction.guild,
-            "🔨 Member Banned",
-            `**Member:** ${user.tag}\n**Moderator:** ${interaction.user}\n**Reason:** ${reason}`,
-            "#D83C3C"
+            "Member Banned",
+            `Member: ${user.tag}\nModerator: ${interaction.user}\nReason: ${reason}`
         );
 
         return interaction.reply(
-            `🔨 **${user.tag}** has been banned.\n> ${reason}`
+            `**${user.tag}** has been banned.`
         );
-
     }
 
-    /* ---------- KICK ---------- */
+    /* KICK */
 
     if (command === "kick") {
 
@@ -918,7 +916,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Kick Members** permission.",
+                    "You need the Kick Members permission.",
                 ephemeral: true
             });
         }
@@ -946,7 +944,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You cannot kick this member.",
+                    "You cannot kick this member.",
                 ephemeral: true
             });
         }
@@ -955,18 +953,16 @@ async function commandHandler(
 
         await logAction(
             interaction.guild,
-            "👢 Member Kicked",
-            `**Member:** ${user.tag}\n**Moderator:** ${interaction.user}\n**Reason:** ${reason}`,
-            "#E67E22"
+            "Member Kicked",
+            `Member: ${user.tag}\nModerator: ${interaction.user}\nReason: ${reason}`
         );
 
         return interaction.reply(
-            `👢 **${user.tag}** has been kicked.\n> ${reason}`
+            `**${user.tag}** has been kicked.`
         );
-
     }
 
-    /* ---------- TIMEOUT ---------- */
+    /* TIMEOUT */
 
     if (command === "timeout") {
 
@@ -978,7 +974,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Moderate Members** permission.",
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
@@ -1011,7 +1007,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You cannot timeout this member.",
+                    "You cannot timeout this member.",
                 ephemeral: true
             });
         }
@@ -1023,18 +1019,16 @@ async function commandHandler(
 
         await logAction(
             interaction.guild,
-            "⏱️ Member Timed Out",
-            `**Member:** ${user.tag}\n**Duration:** ${minutes} minutes\n**Moderator:** ${interaction.user}\n**Reason:** ${reason}`,
-            "#E67E22"
+            "Member Timed Out",
+            `Member: ${user.tag}\nDuration: ${minutes} minutes\nModerator: ${interaction.user}\nReason: ${reason}`
         );
 
         return interaction.reply(
-            `⏱️ **${user.tag}** has been timed out for **${minutes} minutes**.\n> ${reason}`
+            `**${user.tag}** has been timed out for **${minutes} minutes**.`
         );
-
     }
 
-    /* ---------- UNTIMEOUT ---------- */
+    /* UNTIMEOUT */
 
     if (command === "untimeout") {
 
@@ -1046,7 +1040,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Moderate Members** permission.",
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
@@ -1068,7 +1062,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You cannot modify this member.",
+                    "You cannot modify this member.",
                 ephemeral: true
             });
         }
@@ -1079,12 +1073,11 @@ async function commandHandler(
         );
 
         return interaction.reply(
-            `🔓 Timeout removed from **${user.tag}**.`
+            `Timeout removed from **${user.tag}**.`
         );
-
     }
 
-    /* ---------- WARN ---------- */
+    /* WARN */
 
     if (command === "warn") {
 
@@ -1096,7 +1089,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Moderate Members** permission.",
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
@@ -1123,7 +1116,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You cannot warn this member.",
+                    "You cannot warn this member.",
                 ephemeral: true
             });
         }
@@ -1143,25 +1136,23 @@ async function commandHandler(
                 Date.now()
         });
 
-        save(
+        saveJSON(
             WARNINGS_FILE,
             warnings
         );
 
         await logAction(
             interaction.guild,
-            "⚠️ Member Warned",
-            `**Member:** ${user.tag}\n**Moderator:** ${interaction.user}\n**Reason:** ${reason}`,
-            "#F1C40F"
+            "Member Warned",
+            `Member: ${user.tag}\nModerator: ${interaction.user}\nReason: ${reason}`
         );
 
         return interaction.reply(
-            `⚠️ **${user.tag}** has been warned.\n> ${reason}\n\nWarnings: **${warnings[key].length}**`
+            `**${user.tag}** has been warned.`
         );
-
     }
 
-    /* ---------- WARNINGS ---------- */
+    /* WARNINGS */
 
     if (command === "warnings") {
 
@@ -1173,7 +1164,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need moderation permission.",
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
@@ -1188,9 +1179,15 @@ async function commandHandler(
             warnings[key] || [];
 
         if (!list.length) {
+
+            const embed = createEmbed({
+                title: "Warnings",
+                description:
+                    `**${user.tag}** has no warnings.`
+            });
+
             return interaction.reply({
-                content:
-                    `✅ **${user.tag}** has no warnings.`,
+                embeds: [embed],
                 ephemeral: true
             });
         }
@@ -1202,33 +1199,24 @@ async function commandHandler(
                         `**${index + 1}.** ${item.reason}\n` +
                         `Moderator: <@${item.moderator}>\n` +
                         `<t:${Math.floor(
-                            item.timestamp /
-                            1000
+                            item.timestamp / 1000
                         )}:R>`
                 )
                 .join("\n\n");
 
-        const embed =
-            new EmbedBuilder()
-                .setTitle(
-                    `Warnings — ${user.tag}`
-                )
-                .setDescription(
-                    description.slice(
-                        0,
-                        4000
-                    )
-                )
-                .setColor("#F1C40F");
+        const embed = createEmbed({
+            title: `Warnings — ${user.tag}`,
+            description:
+                description.slice(0, 4000)
+        });
 
         return interaction.reply({
             embeds: [embed],
             ephemeral: true
         });
-
     }
 
-    /* ---------- CLEAR WARNINGS ---------- */
+    /* CLEAR WARNINGS */
 
     if (command === "clearwarnings") {
 
@@ -1240,7 +1228,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need moderation permission.",
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
@@ -1253,18 +1241,17 @@ async function commandHandler(
 
         delete warnings[key];
 
-        save(
+        saveJSON(
             WARNINGS_FILE,
             warnings
         );
 
         return interaction.reply(
-            `🧹 Cleared warnings for **${user.tag}**.`
+            `Warnings cleared for **${user.tag}**.`
         );
-
     }
 
-    /* ---------- PURGE ---------- */
+    /* PURGE */
 
     if (command === "purge") {
 
@@ -1276,7 +1263,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Messages** permission.",
+                    "You need the Manage Messages permission.",
                 ephemeral: true
             });
         }
@@ -1294,13 +1281,12 @@ async function commandHandler(
 
         return interaction.reply({
             content:
-                `🧹 Deleted **${deleted.size}** messages.`,
+                `Deleted ${deleted.size} messages.`,
             ephemeral: true
         });
-
     }
 
-    /* ---------- LOCK ---------- */
+    /* LOCK */
 
     if (command === "lock") {
 
@@ -1312,7 +1298,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Channels** permission.",
+                    "You need the Manage Channels permission.",
                 ephemeral: true
             });
         }
@@ -1326,17 +1312,16 @@ async function commandHandler(
 
         await logAction(
             interaction.guild,
-            "🔒 Channel Locked",
-            `**Channel:** ${interaction.channel}\n**Moderator:** ${interaction.user}`
+            "Channel Locked",
+            `Channel: ${interaction.channel}\nModerator: ${interaction.user}`
         );
 
         return interaction.reply(
-            "🔒 This channel has been locked."
+            "This channel has been locked."
         );
-
     }
 
-    /* ---------- UNLOCK ---------- */
+    /* UNLOCK */
 
     if (command === "unlock") {
 
@@ -1348,7 +1333,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Channels** permission.",
+                    "You need the Manage Channels permission.",
                 ephemeral: true
             });
         }
@@ -1361,12 +1346,11 @@ async function commandHandler(
         );
 
         return interaction.reply(
-            "🔓 This channel has been unlocked."
+            "This channel has been unlocked."
         );
-
     }
 
-    /* ---------- SLOWMODE ---------- */
+    /* SLOWMODE */
 
     if (command === "slowmode") {
 
@@ -1378,7 +1362,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Channels** permission.",
+                    "You need the Manage Channels permission.",
                 ephemeral: true
             });
         }
@@ -1394,13 +1378,12 @@ async function commandHandler(
 
         return interaction.reply(
             seconds === 0
-                ? "🐇 Slowmode disabled."
-                : `🐢 Slowmode set to **${seconds} seconds**.`
+                ? "Slowmode disabled."
+                : `Slowmode set to **${seconds} seconds**.`
         );
-
     }
 
-    /* ---------- ROLE ---------- */
+    /* ROLE */
 
     if (command === "role") {
 
@@ -1412,7 +1395,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Roles** permission.",
+                    "You need the Manage Roles permission.",
                 ephemeral: true
             });
         }
@@ -1434,7 +1417,7 @@ async function commandHandler(
         if (!member) {
             return interaction.reply({
                 content:
-                    "❌ Member not found.",
+                    "Member not found.",
                 ephemeral: true
             });
         }
@@ -1445,7 +1428,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You cannot manage that role.",
+                    "You cannot manage that role.",
                 ephemeral: true
             });
         }
@@ -1456,7 +1439,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ My role is not high enough to manage that role.",
+                    "My bot role is not high enough to manage that role.",
                 ephemeral: true
             });
         }
@@ -1466,20 +1449,18 @@ async function commandHandler(
             await member.roles.add(role);
 
             return interaction.reply(
-                `✅ Added ${role} to **${user.tag}**.`
+                `Added ${role} to **${user.tag}**.`
             );
-
         }
 
         await member.roles.remove(role);
 
         return interaction.reply(
-            `✅ Removed ${role} from **${user.tag}**.`
+            `Removed ${role} from **${user.tag}**.`
         );
-
     }
 
-    /* ---------- ANNOUNCE ---------- */
+    /* ANNOUNCE */
 
     if (command === "announce") {
 
@@ -1491,35 +1472,27 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Messages** permission.",
+                    "You need the Manage Messages permission.",
                 ephemeral: true
             });
         }
 
         const title =
-            interaction.options.getString("title");
+            interaction.options.getString(
+                "title"
+            );
 
         const message =
-            interaction.options.getString("message");
+            interaction.options.getString(
+                "message"
+            );
 
-        let colour =
-            interaction.options.getString("colour") ||
-            "#315B9A";
-
-        if (!validHex(colour)) {
-            colour = "#315B9A";
-        }
-
-        const embed =
-            new EmbedBuilder()
-                .setTitle(title)
-                .setDescription(message)
-                .setColor(colour)
-                .setFooter({
-                    text:
-                        "Roblox Schools Association"
-                })
-                .setTimestamp();
+        const embed = createEmbed({
+            title,
+            description: message,
+            footer:
+                "Roblox Schools Association"
+        });
 
         await interaction.channel.send({
             embeds: [embed]
@@ -1527,13 +1500,12 @@ async function commandHandler(
 
         return interaction.reply({
             content:
-                "📢 Announcement sent.",
+                "Announcement sent.",
             ephemeral: true
         });
-
     }
 
-    /* ---------- EMBED ---------- */
+    /* EMBED CREATOR */
 
     if (command === "embed") {
 
@@ -1545,33 +1517,30 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Messages** permission.",
+                    "You need the Manage Messages permission.",
                 ephemeral: true
             });
         }
 
-        const session = {
-            title: "",
-            description: "",
-            colour: "#315B9A",
-            footer: "",
-            image: "",
-            thumbnail: "",
-            fields: []
-        };
-
         embedSessions.set(
             interaction.user.id,
-            session
+            {
+                title: "RSA Announcement",
+                description: "",
+                footer:
+                    "Roblox Schools Association",
+                image: "",
+                thumbnail: "",
+                fields: []
+            }
         );
 
-        return sendEmbedBuilder(
+        return showEmbedBuilder(
             interaction
         );
-
     }
 
-    /* ---------- SET LOGS ---------- */
+    /* SET LOGS */
 
     if (command === "setlogs") {
 
@@ -1583,7 +1552,7 @@ async function commandHandler(
         ) {
             return interaction.reply({
                 content:
-                    "❌ You need **Manage Server** permission.",
+                    "You need the Manage Server permission.",
                 ephemeral: true
             });
         }
@@ -1598,88 +1567,71 @@ async function commandHandler(
             logChannel: channel.id
         };
 
-        save(
+        saveJSON(
             CONFIG_FILE,
             configs
         );
 
         return interaction.reply(
-            `✅ Moderation logs will now be sent to ${channel}.`
+            `Moderation logs are now being sent to ${channel}.`
         );
-
     }
 
-    /* ---------- LOGS ---------- */
+    /* LOGS */
 
     if (command === "logs") {
 
         const channel =
             configs[interaction.guild.id]?.logChannel;
 
-        return interaction.reply({
-            content:
+        const embed = createEmbed({
+            title: "Moderation Logs",
+            description:
                 channel
-                    ? `📋 Current log channel: <#${channel}>`
-                    : "📋 No log channel has been configured.",
-            ephemeral: true
+                    ? `Current log channel: <#${channel}>`
+                    : "No log channel has been configured."
         });
-
-    }
-
-    /* ---------- HELP ---------- */
-
-    if (command === "help") {
-
-        const embed =
-            new EmbedBuilder()
-                .setTitle(
-                    "RSA Administrator"
-                )
-                .setDescription(
-                    "Official administration system for the Roblox Schools Association."
-                )
-                .addFields(
-                    {
-                        name: "🛡️ Moderation",
-                        value:
-                            "`/ban` `/kick` `/timeout` `/untimeout` `/warn` `/warnings` `/clearwarnings` `/purge`"
-                    },
-                    {
-                        name: "⚙️ Management",
-                        value:
-                            "`/lock` `/unlock` `/slowmode` `/role` `/announce`"
-                    },
-                    {
-                        name: "📋 Information",
-                        value:
-                            "`/serverinfo` `/userinfo` `/botinfo` `/ping`"
-                    },
-                    {
-                        name: "🎨 Tools",
-                        value:
-                            "`/embed` `/setlogs` `/logs`"
-                    }
-                )
-                .setColor("#315B9A")
-                .setFooter({
-                    text:
-                        "Roblox Schools Association"
-                });
 
         return interaction.reply({
             embeds: [embed],
             ephemeral: true
         });
-
     }
-
 }
 
 /* =========================================================
    EMBED BUILDER
 ========================================================= */
 
-async function sendEmbedBuilder(
+function buildCreatorEmbed(session) {
+
+    return createEmbed({
+        title:
+            session.title ||
+            "RSA Announcement",
+
+        description:
+            session.description ||
+            "Use the buttons below to build your embed.",
+
+        footer:
+            session.footer ||
+            "Roblox Schools Association",
+
+        image:
+            session.image || undefined,
+
+        thumbnail:
+            session.thumbnail || undefined,
+
+        fields:
+            session.fields.length
+                ? session.fields
+                : undefined
+    });
+}
+
+async function showEmbedBuilder(
     interaction
 ) {
 
@@ -1692,199 +1644,103 @@ async function sendEmbedBuilder(
         return;
     }
 
-    const preview =
-        createEmbed(
-            session
-        );
-
-    const controls =
+    const row1 =
         new ActionRowBuilder()
             .addComponents(
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_title"
-                    )
-                    .setLabel(
-                        "Title"
-                    )
+                    .setCustomId("embed_title")
+                    .setLabel("Title")
                     .setStyle(
                         ButtonStyle.Primary
                     ),
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_description"
-                    )
-                    .setLabel(
-                        "Description"
-                    )
+                    .setCustomId("embed_description")
+                    .setLabel("Description")
                     .setStyle(
                         ButtonStyle.Primary
                     ),
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_colour"
-                    )
-                    .setLabel(
-                        "Colour"
-                    )
-                    .setStyle(
-                        ButtonStyle.Secondary
-                    ),
-
-                new ButtonBuilder()
-                    .setCustomId(
-                        "eb_extra"
-                    )
-                    .setLabel(
-                        "Images & Footer"
-                    )
+                    .setCustomId("embed_extra")
+                    .setLabel("Images / Footer")
                     .setStyle(
                         ButtonStyle.Secondary
                     )
             );
 
-    const controls2 =
+    const row2 =
         new ActionRowBuilder()
             .addComponents(
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_field"
-                    )
-                    .setLabel(
-                        "Add Field"
-                    )
+                    .setCustomId("embed_field")
+                    .setLabel("Add Field")
                     .setStyle(
                         ButtonStyle.Secondary
                     ),
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_preview"
-                    )
-                    .setLabel(
-                        "Preview"
-                    )
+                    .setCustomId("embed_preview")
+                    .setLabel("Preview")
                     .setStyle(
                         ButtonStyle.Success
                     ),
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_send"
-                    )
-                    .setLabel(
-                        "Send"
-                    )
+                    .setCustomId("embed_send")
+                    .setLabel("Send")
                     .setStyle(
                         ButtonStyle.Success
                     ),
 
                 new ButtonBuilder()
-                    .setCustomId(
-                        "eb_cancel"
-                    )
-                    .setLabel(
-                        "Cancel"
-                    )
+                    .setCustomId("embed_cancel")
+                    .setLabel("Cancel")
                     .setStyle(
                         ButtonStyle.Danger
                     )
             );
 
-    const content =
-        "### RSA Embed Creator\n" +
-        "Build your announcement below, then press **Send** when you're ready.";
-
     const payload = {
-        content,
-        embeds: [preview],
+        content:
+            "### RSA Embed Creator\nCreate a professional RSA embed using the controls below.",
+        embeds: [
+            buildCreatorEmbed(session)
+        ],
         components: [
-            controls,
-            controls2
+            row1,
+            row2
         ],
         ephemeral: true
     };
 
-    if (interaction.replied) {
-
+    if (
+        interaction.replied ||
+        interaction.deferred
+    ) {
         return interaction.editReply(
             payload
         );
-
     }
 
     return interaction.reply(
         payload
     );
-
-}
-
-function createEmbed(
-    session
-) {
-
-    const embed =
-        new EmbedBuilder()
-            .setColor(
-                validHex(session.colour)
-                    ? session.colour
-                    : "#315B9A"
-            );
-
-    if (session.title) {
-        embed.setTitle(
-            session.title
-        );
-    }
-
-    if (session.description) {
-        embed.setDescription(
-            session.description
-        );
-    }
-
-    if (session.thumbnail) {
-        embed.setThumbnail(
-            session.thumbnail
-        );
-    }
-
-    if (session.image) {
-        embed.setImage(
-            session.image
-        );
-    }
-
-    if (session.footer) {
-        embed.setFooter({
-            text: session.footer
-        });
-    }
-
-    if (session.fields.length) {
-        embed.addFields(
-            session.fields
-        );
-    }
-
-    return embed;
 }
 
 /* =========================================================
    BUTTON HANDLER
 ========================================================= */
 
-async function buttonHandler(
+async function handleButton(
     interaction
 ) {
 
     if (
         !interaction.customId.startsWith(
-            "eb_"
+            "embed_"
         )
     ) {
         return;
@@ -1898,173 +1754,121 @@ async function buttonHandler(
     if (!session) {
         return interaction.reply({
             content:
-                "❌ Your embed session has expired. Run `/embed` again.",
+                "Your embed session has expired. Run `/embed` again.",
             ephemeral: true
         });
     }
 
     if (
         interaction.customId ===
-        "eb_title"
+        "embed_title"
     ) {
 
-        return showModal(
+        return showSingleModal(
             interaction,
             "modal_title",
-            "Set Embed Title",
+            "Embed Title",
             "title",
             "Title",
             TextInputStyle.Short,
             session.title
         );
-
     }
 
     if (
         interaction.customId ===
-        "eb_description"
+        "embed_description"
     ) {
 
-        return showModal(
+        return showSingleModal(
             interaction,
             "modal_description",
-            "Set Embed Description",
+            "Embed Description",
             "description",
             "Description",
             TextInputStyle.Paragraph,
             session.description
         );
-
     }
 
     if (
         interaction.customId ===
-        "eb_colour"
-    ) {
-
-        return showModal(
-            interaction,
-            "modal_colour",
-            "Set Embed Colour",
-            "colour",
-            "Hex Colour",
-            TextInputStyle.Short,
-            session.colour
-        );
-
-    }
-
-    if (
-        interaction.customId ===
-        "eb_extra"
+        "embed_extra"
     ) {
 
         const modal =
             new ModalBuilder()
-                .setCustomId(
-                    "modal_extra"
-                )
+                .setCustomId("modal_extra")
                 .setTitle(
-                    "Images & Footer"
+                    "Images and Footer"
                 );
 
         const footer =
             new TextInputBuilder()
-                .setCustomId(
-                    "footer"
-                )
-                .setLabel(
-                    "Footer text"
-                )
+                .setCustomId("footer")
+                .setLabel("Footer")
                 .setStyle(
                     TextInputStyle.Short
                 )
                 .setRequired(false)
                 .setValue(
-                    session.footer.slice(
-                        0,
-                        2048
-                    )
+                    session.footer || ""
                 );
 
         const image =
             new TextInputBuilder()
-                .setCustomId(
-                    "image"
-                )
-                .setLabel(
-                    "Image URL"
-                )
+                .setCustomId("image")
+                .setLabel("Image URL")
                 .setStyle(
                     TextInputStyle.Short
                 )
                 .setRequired(false)
                 .setValue(
-                    session.image.slice(
-                        0,
-                        4000
-                    )
+                    session.image || ""
                 );
 
         const thumbnail =
             new TextInputBuilder()
-                .setCustomId(
-                    "thumbnail"
-                )
-                .setLabel(
-                    "Thumbnail URL"
-                )
+                .setCustomId("thumbnail")
+                .setLabel("Thumbnail URL")
                 .setStyle(
                     TextInputStyle.Short
                 )
                 .setRequired(false)
                 .setValue(
-                    session.thumbnail.slice(
-                        0,
-                        4000
-                    )
+                    session.thumbnail || ""
                 );
 
         modal.addComponents(
-            new ActionRowBuilder().addComponents(
-                footer
-            ),
-            new ActionRowBuilder().addComponents(
-                image
-            ),
-            new ActionRowBuilder().addComponents(
-                thumbnail
-            )
+            new ActionRowBuilder()
+                .addComponents(footer),
+
+            new ActionRowBuilder()
+                .addComponents(image),
+
+            new ActionRowBuilder()
+                .addComponents(thumbnail)
         );
 
         return interaction.showModal(
             modal
         );
-
     }
 
     if (
         interaction.customId ===
-        "eb_field"
+        "embed_field"
     ) {
 
         const modal =
             new ModalBuilder()
-                .setCustomId(
-                    "modal_field"
-                )
-                .setTitle(
-                    "Add Embed Field"
-                );
+                .setCustomId("modal_field")
+                .setTitle("Add Embed Field");
 
         const name =
             new TextInputBuilder()
-                .setCustomId(
-                    "name"
-                )
-                .setLabel(
-                    "Field name"
-                )
+                .setCustomId("name")
+                .setLabel("Field Name")
                 .setStyle(
                     TextInputStyle.Short
                 )
@@ -2073,12 +1877,8 @@ async function buttonHandler(
 
         const value =
             new TextInputBuilder()
-                .setCustomId(
-                    "value"
-                )
-                .setLabel(
-                    "Field value"
-                )
+                .setCustomId("value")
+                .setLabel("Field Value")
                 .setStyle(
                     TextInputStyle.Paragraph
                 )
@@ -2086,44 +1886,41 @@ async function buttonHandler(
                 .setMaxLength(1024);
 
         modal.addComponents(
-            new ActionRowBuilder().addComponents(
-                name
-            ),
-            new ActionRowBuilder().addComponents(
-                value
-            )
+            new ActionRowBuilder()
+                .addComponents(name),
+
+            new ActionRowBuilder()
+                .addComponents(value)
         );
 
         return interaction.showModal(
             modal
         );
-
     }
 
     if (
         interaction.customId ===
-        "eb_preview"
+        "embed_preview"
     ) {
 
         return interaction.reply({
             content:
-                "### Embed Preview",
+                "Embed Preview",
             embeds: [
-                createEmbed(session)
+                buildCreatorEmbed(session)
             ],
             ephemeral: true
         });
-
     }
 
     if (
         interaction.customId ===
-        "eb_send"
+        "embed_send"
     ) {
 
         await interaction.channel.send({
             embeds: [
-                createEmbed(session)
+                buildCreatorEmbed(session)
             ]
         });
 
@@ -2133,16 +1930,15 @@ async function buttonHandler(
 
         return interaction.update({
             content:
-                "✅ Embed sent successfully.",
+                "Embed sent successfully.",
             embeds: [],
             components: []
         });
-
     }
 
     if (
         interaction.customId ===
-        "eb_cancel"
+        "embed_cancel"
     ) {
 
         embedSessions.delete(
@@ -2151,23 +1947,21 @@ async function buttonHandler(
 
         return interaction.update({
             content:
-                "❌ Embed creation cancelled.",
+                "Embed creation cancelled.",
             embeds: [],
             components: []
         });
-
     }
-
 }
 
 /* =========================================================
    MODALS
 ========================================================= */
 
-async function showModal(
+async function showSingleModal(
     interaction,
     customId,
-    title,
+    modalTitle,
     inputId,
     label,
     style,
@@ -2177,7 +1971,7 @@ async function showModal(
     const modal =
         new ModalBuilder()
             .setCustomId(customId)
-            .setTitle(title);
+            .setTitle(modalTitle);
 
     const input =
         new TextInputBuilder()
@@ -2186,8 +1980,7 @@ async function showModal(
             .setStyle(style)
             .setRequired(false)
             .setMaxLength(
-                style ===
-                TextInputStyle.Paragraph
+                style === TextInputStyle.Paragraph
                     ? 4000
                     : 256
             );
@@ -2196,8 +1989,7 @@ async function showModal(
         input.setValue(
             value.slice(
                 0,
-                style ===
-                    TextInputStyle.Paragraph
+                style === TextInputStyle.Paragraph
                     ? 4000
                     : 256
             )
@@ -2205,18 +1997,16 @@ async function showModal(
     }
 
     modal.addComponents(
-        new ActionRowBuilder().addComponents(
-            input
-        )
+        new ActionRowBuilder()
+            .addComponents(input)
     );
 
     return interaction.showModal(
         modal
     );
-
 }
 
-async function modalHandler(
+async function handleModal(
     interaction
 ) {
 
@@ -2228,7 +2018,7 @@ async function modalHandler(
     if (!session) {
         return interaction.reply({
             content:
-                "❌ Your embed session has expired.",
+                "Your embed session has expired.",
             ephemeral: true
         });
     }
@@ -2237,49 +2027,20 @@ async function modalHandler(
         interaction.customId ===
         "modal_title"
     ) {
-
         session.title =
             interaction.fields.getTextInputValue(
                 "title"
             );
-
     }
 
     if (
         interaction.customId ===
         "modal_description"
     ) {
-
         session.description =
             interaction.fields.getTextInputValue(
                 "description"
             );
-
-    }
-
-    if (
-        interaction.customId ===
-        "modal_colour"
-    ) {
-
-        const colour =
-            interaction.fields.getTextInputValue(
-                "colour"
-            );
-
-        if (!validHex(colour)) {
-
-            return interaction.reply({
-                content:
-                    "❌ Invalid colour. Use a hex colour such as `#315B9A`.",
-                ephemeral: true
-            });
-
-        }
-
-        session.colour =
-            colour;
-
     }
 
     if (
@@ -2301,13 +2062,22 @@ async function modalHandler(
             interaction.fields.getTextInputValue(
                 "thumbnail"
             );
-
     }
 
     if (
         interaction.customId ===
         "modal_field"
     ) {
+
+        if (
+            session.fields.length >= 25
+        ) {
+            return interaction.reply({
+                content:
+                    "Discord allows a maximum of 25 embed fields.",
+                ephemeral: true
+            });
+        }
 
         const name =
             interaction.fields.getTextInputValue(
@@ -2319,36 +2089,70 @@ async function modalHandler(
                 "value"
             );
 
-        if (
-            session.fields.length >= 25
-        ) {
-
-            return interaction.reply({
-                content:
-                    "❌ Discord allows a maximum of 25 embed fields.",
-                ephemeral: true
-            });
-
-        }
-
         session.fields.push({
             name,
             value,
             inline: false
         });
-
     }
 
     await interaction.reply({
         content:
-            "✅ Updated your embed.",
+            "Updated. Your embed creator is still open.",
         ephemeral: true
     });
 
+    /* Refresh the creator after a modal submission. */
+
+    setTimeout(async () => {
+
+        try {
+
+            const channel =
+                await interaction.channel;
+
+            const messages =
+                await channel.messages.fetch({
+                    limit: 10
+                });
+
+            const creatorMessage =
+                messages.find(
+                    message =>
+                        message.author.id ===
+                        client.user.id &&
+                        message.components.length > 0 &&
+                        message.components.some(
+                            row =>
+                                row.components.some(
+                                    component =>
+                                        component.customId ===
+                                        "embed_send"
+                                )
+                        )
+                );
+
+            if (!creatorMessage) {
+                return;
+            }
+
+            await creatorMessage.edit({
+                embeds: [
+                    buildCreatorEmbed(
+                        session
+                    )
+                ]
+            });
+
+        } catch {
+            /* Ignore refresh errors. */
+        }
+
+    }, 250);
 }
 
 /* =========================================================
-   MEMBER LOGGING
+   MEMBER EVENTS
 ========================================================= */
 
 client.on(
@@ -2357,11 +2161,9 @@ client.on(
 
         await logAction(
             member.guild,
-            "📥 Member Joined",
-            `**Member:** ${member.user.tag}\n**ID:** ${member.id}`,
-            "#2ECC71"
+            "Member Joined",
+            `Member: ${member.user.tag}\nID: ${member.id}`
         );
-
     }
 );
 
@@ -2371,11 +2173,9 @@ client.on(
 
         await logAction(
             member.guild,
-            "📤 Member Left",
-            `**Member:** ${member.user.tag}\n**ID:** ${member.id}`,
-            "#E74C3C"
+            "Member Left",
+            `Member: ${member.user.tag}\nID: ${member.id}`
         );
-
     }
 );
 
@@ -2392,11 +2192,9 @@ client.on(
 
         await logAction(
             message.guild,
-            "🗑️ Message Deleted",
-            `**Author:** ${message.author?.tag || "Unknown"}\n**Channel:** ${message.channel}\n\n${message.content?.slice(0, 1500) || "No text content."}`,
-            "#E74C3C"
+            "Message Deleted",
+            `Author: ${message.author?.tag || "Unknown"}\nChannel: ${message.channel}\n\n${message.content?.slice(0, 1500) || "No text content."}`
         );
-
     }
 );
 
@@ -2407,36 +2205,30 @@ client.on(
 client.on(
     "error",
     error => {
-
         console.error(
             "Discord client error:",
             error
         );
-
     }
 );
 
 process.on(
     "unhandledRejection",
     error => {
-
         console.error(
             "Unhandled promise rejection:",
             error
         );
-
     }
 );
 
 process.on(
     "uncaughtException",
     error => {
-
         console.error(
             "Uncaught exception:",
             error
         );
-
     }
 );
 
