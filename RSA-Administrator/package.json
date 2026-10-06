@@ -1,6 +1,6 @@
 {
   "name": "rsa-administrator",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "description": "Official administration bot for the Roblox Schools Association",
   "main": "index.js",
   "scripts": {
