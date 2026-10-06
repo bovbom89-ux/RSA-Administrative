@@ -1,10 +1,13 @@
 {
   "name": "rsa-administrator",
-  "version": "2.0.0",
-  "description": "Roblox Schools Association Administrator Bot",
+  "version": "3.0.0",
+  "description": "Official administration bot for the Roblox Schools Association",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "dependencies": {
     "discord.js": "^14.25.1",
