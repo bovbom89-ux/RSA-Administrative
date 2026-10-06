@@ -1,0 +1,13 @@
+{
+  "name": "rsa-administrator",
+  "version": "2.0.0",
+  "description": "Roblox Schools Association Administrator Bot",
+  "main": "index.js",
+  "scripts": {
+    "start": "node index.js"
+  },
+  "dependencies": {
+    "discord.js": "^14.25.1",
+    "dotenv": "^17.2.3"
+  }
+}
