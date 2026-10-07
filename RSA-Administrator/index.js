@@ -13,25 +13,25 @@ const {
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
-    StringSelectMenuBuilder,
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
+    StringSelectMenuBuilder,
 } = require("discord.js");
 
 const fs = require("fs");
 const path = require("path");
 
 // ============================================================
-// RSA UTILITY
-// ROBLOX SCHOOL ASSOCIATION
+// CONFIG
 // ============================================================
-
-// -------------------- ENVIRONMENT --------------------
 
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
+
+const BRAND_COLOUR = "#2F4DA8";
+const LOGO = "<:Our_Logo:1557149633623363594>";
 
 if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
     console.error(
@@ -39,12 +39,6 @@ if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
     );
     process.exit(1);
 }
-
-// -------------------- BRANDING --------------------
-
-const BRAND_COLOR = "#2F4DA8";
-const LOGO = "<:Our_Logo:1557149633623363594>";
-const BOT_NAME = "RSA Utility";
 
 // ============================================================
 // CLIENT
@@ -55,17 +49,13 @@ const client = new Client({
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMembers,
         GatewayIntentBits.GuildMessages,
-        GatewayIntentBits.DirectMessages,
         GatewayIntentBits.MessageContent,
     ],
-    partials: [
-        Partials.Channel,
-        Partials.Message,
-    ],
+    partials: [Partials.Channel],
 });
 
 // ============================================================
-// DATA STORAGE
+// DATA
 // ============================================================
 
 const dataFolder = path.join(__dirname, "data");
@@ -77,7 +67,7 @@ if (!fs.existsSync(dataFolder)) {
 const warningsFile = path.join(dataFolder, "warnings.json");
 const configFile = path.join(dataFolder, "config.json");
 
-function loadJSON(file, fallback) {
+function loadJSON(file, fallback = {}) {
     try {
         if (!fs.existsSync(file)) {
             fs.writeFileSync(
@@ -92,7 +82,7 @@ function loadJSON(file, fallback) {
             fs.readFileSync(file, "utf8")
         );
     } catch (error) {
-        console.error(`Failed loading ${file}:`, error);
+        console.error(`Could not load ${file}:`, error);
         return fallback;
     }
 }
@@ -104,7 +94,7 @@ function saveJSON(file, data) {
             JSON.stringify(data, null, 2)
         );
     } catch (error) {
-        console.error(`Failed saving ${file}:`, error);
+        console.error(`Could not save ${file}:`, error);
     }
 }
 
@@ -112,43 +102,33 @@ let warnings = loadJSON(warningsFile, {});
 let config = loadJSON(configFile, {});
 
 // ============================================================
-// TEMPORARY ENROLMENT QUESTIONNAIRES
+// TEMPORARY SUBMISSIONS
 // ============================================================
 
-const enrolments = new Map();
-
-// Structure:
-//
-// userId => {
-//     guildId,
-//     answers: {
-//         schoolName,
-//         description,
-//         invite,
-//         ownerRole,
-//         members,
-//         reason
-//     },
-//     currentQuestion,
-//     completed,
-//     createdAt
-// }
+const submissions = new Map();
 
 // ============================================================
-// EMBED SYSTEM
+// EMBED HELPER
 // ============================================================
 
-function createEmbed(title, description = null) {
-    const embed = new EmbedBuilder()
+function createEmbed(title, description) {
+    return new EmbedBuilder()
+        .setColor(BRAND_COLOUR)
         .setTitle(`${LOGO} ${title}`)
-        .setColor(BRAND_COLOR)
+        .setDescription(description || null)
         .setTimestamp();
+}
 
-    if (description) {
-        embed.setDescription(description);
+// ============================================================
+// CONFIG HELPER
+// ============================================================
+
+function getGuildConfig(guildId) {
+    if (!config[guildId]) {
+        config[guildId] = {};
     }
 
-    return embed;
+    return config[guildId];
 }
 
 // ============================================================
@@ -156,14 +136,12 @@ function createEmbed(title, description = null) {
 // ============================================================
 
 function canManage(member) {
-    if (!member) return false;
-
     return (
         member.permissions.has(
-            PermissionFlagsBits.Administrator
+            PermissionFlagsBits.ManageGuild
         ) ||
         member.permissions.has(
-            PermissionFlagsBits.ManageGuild
+            PermissionFlagsBits.Administrator
         )
     );
 }
@@ -180,19 +158,19 @@ function isStaff(member) {
     }
 
     const guildConfig =
-        config[member.guild.id];
+        getGuildConfig(member.guild.id);
 
-    if (!guildConfig?.enrolStaffRoleId) {
+    if (!guildConfig.staffRoleId) {
         return false;
     }
 
     return member.roles.cache.has(
-        guildConfig.enrolStaffRoleId
+        guildConfig.staffRoleId
     );
 }
 
 // ============================================================
-// COMMANDS
+// SLASH COMMANDS
 // ============================================================
 
 const commands = [
@@ -203,15 +181,15 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("help")
-        .setDescription("Shows all RSA Utility commands"),
+        .setDescription("Shows all available commands"),
 
     new SlashCommandBuilder()
         .setName("ping")
-        .setDescription("Checks the bot latency"),
+        .setDescription("Checks the bot's latency"),
 
     new SlashCommandBuilder()
         .setName("botinfo")
-        .setDescription("Shows information about RSA Utility"),
+        .setDescription("Shows information about the bot"),
 
     new SlashCommandBuilder()
         .setName("serverinfo")
@@ -229,7 +207,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("profile")
-        .setDescription("Shows your RSA profile"),
+        .setDescription("Shows your profile"),
 
     // ========================================================
     // MODERATION
@@ -288,7 +266,7 @@ const commands = [
         .addIntegerOption(option =>
             option
                 .setName("minutes")
-                .setDescription("Timeout duration")
+                .setDescription("Duration in minutes")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(40320)
@@ -334,7 +312,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("warnings")
-        .setDescription("Shows warnings")
+        .setDescription("Shows a member's warnings")
         .addUserOption(option =>
             option
                 .setName("user")
@@ -344,7 +322,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("clearwarnings")
-        .setDescription("Clears warnings")
+        .setDescription("Clears a member's warnings")
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ModerateMembers
         )
@@ -364,7 +342,7 @@ const commands = [
         .addIntegerOption(option =>
             option
                 .setName("amount")
-                .setDescription("Amount to delete")
+                .setDescription("Amount of messages")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(100)
@@ -405,7 +383,7 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("role")
-        .setDescription("Manage a member's roles")
+        .setDescription("Manage member roles")
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageRoles
         )
@@ -459,20 +437,27 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("embed")
-        .setDescription("Creates a branded embed")
+        .setDescription("Creates an embed using a webhook")
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageMessages
         )
         .addStringOption(option =>
             option
                 .setName("title")
-                .setDescription("Title")
+                .setDescription("Embed title")
                 .setRequired(true)
         )
         .addStringOption(option =>
             option
                 .setName("description")
-                .setDescription("Description")
+                .setDescription("Embed description")
+                .setRequired(true)
+        )
+        .addChannelOption(option =>
+            option
+                .setName("channel")
+                .setDescription("Channel to send the embed")
+                .addChannelTypes(ChannelType.GuildText)
                 .setRequired(true)
         ),
 
@@ -488,16 +473,12 @@ const commands = [
         ),
 
     // ========================================================
-    // SCHOOL ENROLMENT
+    // SERVER SUBMISSIONS
     // ========================================================
 
     new SlashCommandBuilder()
-        .setName("enrolschool")
-        .setDescription("Begin a Roblox School Association enrolment"),
-
-    new SlashCommandBuilder()
-        .setName("enrolconfig")
-        .setDescription("Configure school enrolments")
+        .setName("submitconfig")
+        .setDescription("Configure the server submission system")
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageGuild
         ),
@@ -512,9 +493,9 @@ async function registerCommands() {
 
     try {
 
-        const rest = new REST({
-            version: "10"
-        }).setToken(TOKEN);
+        const rest =
+            new REST({ version: "10" })
+                .setToken(TOKEN);
 
         await rest.put(
             Routes.applicationGuildCommands(
@@ -527,16 +508,15 @@ async function registerCommands() {
         );
 
         console.log(
-            "RSA Utility slash commands registered."
+            `Registered ${commands.length} slash commands.`
         );
 
     } catch (error) {
 
         console.error(
-            "Command registration failed:",
+            "Command registration error:",
             error
         );
-
     }
 }
 
@@ -550,38 +530,42 @@ client.once("ready", async () => {
         `Logged in as ${client.user.tag}`
     );
 
+    console.log(
+        `Serving ${client.guilds.cache.size} server(s).`
+    );
+
     await registerCommands();
 
     client.user.setActivity(
-        "Roblox School Association",
+        "server submissions",
         {
             type: 3
         }
     );
-
 });
 
 // ============================================================
-// HELP
+// HELP EMBED
 // ============================================================
 
 function helpEmbed() {
 
-    return createEmbed(
-        "RSA Utility Commands",
-        "Here are the commands available through RSA Utility."
-    )
+    return new EmbedBuilder()
+        .setColor(BRAND_COLOUR)
+        .setTitle(`${LOGO} Commands`)
+        .setDescription(
+            "Here are the commands available."
+        )
         .addFields(
             {
-                name: "Basic",
+                name: "General",
                 value:
                     "`/help`\n" +
                     "`/ping`\n" +
                     "`/botinfo`\n" +
                     "`/serverinfo`\n" +
                     "`/userinfo`\n" +
-                    "`/profile`",
-                inline: true
+                    "`/profile`"
             },
             {
                 name: "Moderation",
@@ -593,8 +577,7 @@ function helpEmbed() {
                     "`/warn`\n" +
                     "`/warnings`\n" +
                     "`/clearwarnings`\n" +
-                    "`/purge`",
-                inline: true
+                    "`/purge`"
             },
             {
                 name: "Management",
@@ -604,962 +587,24 @@ function helpEmbed() {
                     "`/slowmode`\n" +
                     "`/role`\n" +
                     "`/announce`\n" +
-                    "`/embed`",
-                inline: true
+                    "`/embed`"
             },
             {
                 name: "Tickets",
                 value:
-                    "`/ticketconfig`\n\n" +
-                    "Tickets are created from the configured panel.",
-                inline: true
+                    "`/ticketconfig`"
             },
             {
-                name: "School Enrolment",
+                name: "Server Listings",
                 value:
-                    "`/enrolschool`\n" +
-                    "`/enrolconfig`\n\n" +
-                    "Schools complete their questionnaire privately through DMs.",
-                inline: true
-            }
-        );
-}
-
-// ============================================================
-// ENROLMENT CONFIG EMBED
-// ============================================================
-
-function buildEnrolConfigEmbed(guild) {
-
-    const guildConfig =
-        config[guild.id] || {};
-
-    const staffRole =
-        guildConfig.enrolStaffRoleId
-            ? guild.roles.cache.get(
-                guildConfig.enrolStaffRoleId
-            )
-            : null;
-
-    const approvedRole =
-        guildConfig.enrolApprovedRoleId
-            ? guild.roles.cache.get(
-                guildConfig.enrolApprovedRoleId
-            )
-            : null;
-
-    const enrolChannel =
-        guildConfig.enrolChannelId
-            ? guild.channels.cache.get(
-                guildConfig.enrolChannelId
-            )
-            : null;
-
-    const reviewCategory =
-        guildConfig.enrolReviewCategoryId
-            ? guild.channels.cache.get(
-                guildConfig.enrolReviewCategoryId
-            )
-            : null;
-
-    return createEmbed(
-        "School Enrolment Configuration",
-        "Configure how the Roblox School Association enrolment system operates.\n\n" +
-        "**Review channels are automatically created.** Staff do not need to manually create one."
-    )
-        .addFields(
-            {
-                name: "Staff Review Role",
-                value:
-                    staffRole
-                        ? `${staffRole}`
-                        : "Not configured",
-                inline: true
-            },
-            {
-                name: "Approved School Role",
-                value:
-                    approvedRole
-                        ? `${approvedRole}`
-                        : "Not configured",
-                inline: true
-            },
-            {
-                name: "Enrolment Channel",
-                value:
-                    enrolChannel
-                        ? `${enrolChannel}`
-                        : "Not configured",
-                inline: true
-            },
-            {
-                name: "Review Category",
-                value:
-                    reviewCategory
-                        ? `${reviewCategory}`
-                        : "Not configured",
-                inline: true
-            },
-            {
-                name: "Review Access",
-                value:
-                    "Staff only. The applicant will **not** be given access.",
-                inline: false
-            },
-            {
-                name: "Approval",
-                value:
-                    "Approved schools receive their configured role and a clean enrolment announcement.",
-                inline: false
-            }
-        );
-}
-
-// ============================================================
-// ENROLMENT CONFIG PANEL
-// ============================================================
-
-function enrolConfigComponents() {
-
-    return [
-
-        new ActionRowBuilder().addComponents(
-
-            new ButtonBuilder()
-                .setCustomId("enrolcfg_staff")
-                .setLabel("Staff Role")
-                .setStyle(ButtonStyle.Primary),
-
-            new ButtonBuilder()
-                .setCustomId("enrolcfg_approved")
-                .setLabel("Approved Role")
-                .setStyle(ButtonStyle.Primary),
-
-            new ButtonBuilder()
-                .setCustomId("enrolcfg_channel")
-                .setLabel("Enrolment Channel")
-                .setStyle(ButtonStyle.Secondary)
-
-        ),
-
-        new ActionRowBuilder().addComponents(
-
-            new ButtonBuilder()
-                .setCustomId("enrolcfg_category")
-                .setLabel("Review Category")
-                .setStyle(ButtonStyle.Secondary),
-
-            new ButtonBuilder()
-                .setCustomId("enrolcfg_refresh")
-                .setLabel("Refresh")
-                .setStyle(ButtonStyle.Success)
-
-        )
-
-    ];
-}
-
-// ============================================================
-// TICKET CONFIG EMBED
-// ============================================================
-
-function buildTicketConfigEmbed(guild) {
-
-    const guildConfig =
-        config[guild.id] || {};
-
-    const staffRole =
-        guildConfig.ticketStaffRoleId
-            ? guild.roles.cache.get(
-                guildConfig.ticketStaffRoleId
-            )
-            : null;
-
-    const category =
-        guildConfig.ticketCategoryId
-            ? guild.channels.cache.get(
-                guildConfig.ticketCategoryId
-            )
-            : null;
-
-    return createEmbed(
-        "Ticket Configuration",
-        "Configure the RSA Utility ticket system from this panel."
-    )
-        .addFields(
-            {
-                name: "Staff Role",
-                value:
-                    staffRole
-                        ? `${staffRole}`
-                        : "Not configured",
-                inline: true
-            },
-            {
-                name: "Ticket Category",
-                value:
-                    category
-                        ? `${category}`
-                        : "Not configured",
-                inline: true
-            },
-            {
-                name: "Panel",
-                value:
-                    "Use **Send Ticket Panel** to send the public ticket panel into the current channel.",
-                inline: false
-            }
-        );
-}
-
-function ticketConfigComponents() {
-
-    return [
-
-        new ActionRowBuilder().addComponents(
-
-            new ButtonBuilder()
-                .setCustomId("ticketcfg_staff")
-                .setLabel("Staff Role")
-                .setStyle(ButtonStyle.Primary),
-
-            new ButtonBuilder()
-                .setCustomId("ticketcfg_category")
-                .setLabel("Ticket Category")
-                .setStyle(ButtonStyle.Secondary),
-
-            new ButtonBuilder()
-                .setCustomId("ticketcfg_send")
-                .setLabel("Send Ticket Panel")
-                .setStyle(ButtonStyle.Success)
-
-        )
-
-    ];
-}
-
-// ============================================================
-// TICKET PANEL
-// ============================================================
-
-function ticketPanel() {
-
-    const embed = createEmbed(
-        "RSA Support",
-        "Need help from the Roblox School Association team?\n\n" +
-        "Click **Create Ticket** below to open a private support ticket.\n\n" +
-        "Please provide as much information as possible so our staff team can assist you."
-    );
-
-    const row =
-        new ActionRowBuilder().addComponents(
-
-            new ButtonBuilder()
-                .setCustomId("ticket_create")
-                .setLabel("Create Ticket")
-                .setStyle(ButtonStyle.Primary)
-
-        );
-
-    return {
-        embeds: [embed],
-        components: [row]
-    };
-}
-
-// ============================================================
-// QUESTIONNAIRE QUESTIONS
-// ============================================================
-
-const enrolQuestions = [
-
-    {
-        id: "schoolName",
-        number: 1,
-        question:
-            "What is your school's name?",
-        placeholder:
-            "Example: Wyndmere Academy"
-    },
-
-    {
-        id: "description",
-        number: 2,
-        question:
-            "What is the description for your school?",
-        placeholder:
-            "Tell us about your school."
-    },
-
-    {
-        id: "invite",
-        number: 3,
-        question:
-            "What is your school's Discord server invite?",
-        placeholder:
-            "Example: https://discord.gg/example"
-    },
-
-    {
-        id: "ownerRole",
-        number: 4,
-        question:
-            "What is your role within the school?",
-        placeholder:
-            "Example: Founder, Headteacher, Owner"
-    },
-
-    {
-        id: "members",
-        number: 5,
-        question:
-            "Approximately how many members does your school have?",
-        placeholder:
-            "Example: 50"
-    },
-
-    {
-        id: "reason",
-        number: 6,
-        question:
-            "Why would you like your school to join the Roblox School Association?",
-        placeholder:
-            "Explain why you would like to join."
-    }
-
-];
-
-// ============================================================
-// START ENROLMENT
-// ============================================================
-
-async function startEnrolment(user, guild) {
-
-    if (!config[guild.id]?.enrolStaffRoleId) {
-
-        return user.send({
-            embeds: [
-                createEmbed(
-                    "Enrolment Unavailable",
-                    "The Roblox School Association enrolment system has not been configured yet."
-                )
-            ]
-        }).catch(() => {});
-
-    }
-
-    if (
-        enrolments.has(user.id)
-    ) {
-
-        return user.send({
-            embeds: [
-                createEmbed(
-                    "Enrolment Already Started",
-                    "You already have an active questionnaire.\n\nPlease finish or cancel your current questionnaire before starting another one."
-                )
-            ]
-        }).catch(() => {});
-
-    }
-
-    const session = {
-        guildId: guild.id,
-        answers: {},
-        currentQuestion: 0,
-        completed: false,
-        createdAt: Date.now()
-    };
-
-    enrolments.set(
-        user.id,
-        session
-    );
-
-    await user.send({
-        embeds: [
-            createEmbed(
-                "School Enrolment",
-                "Welcome to the **Roblox School Association** enrolment process.\n\n" +
-                "I will ask you **6 questions**, one at a time.\n\n" +
-                "Please answer each question normally in this DM.\n\n" +
-                "At the end, you will be able to review your answers before submitting your enrolment."
-            )
-        ]
-    });
-
-    await askEnrolmentQuestion(user);
-
-}
-
-// ============================================================
-// ASK QUESTION
-// ============================================================
-
-async function askEnrolmentQuestion(user) {
-
-    const session =
-        enrolments.get(user.id);
-
-    if (!session) return;
-
-    const question =
-        enrolQuestions[
-            session.currentQuestion
-        ];
-
-    if (!question) {
-
-        session.completed = true;
-
-        return showEnrolmentReview(user);
-
-    }
-
-    await user.send({
-        embeds: [
-            createEmbed(
-                `Question ${question.number} of ${enrolQuestions.length}`,
-                `**${question.question}**\n\n` +
-                `Reply to this message with your answer.\n\n` +
-                `Example: ${question.placeholder}`
-            )
-        ]
-    });
-
-}
-
-// ============================================================
-// QUESTIONNAIRE MESSAGE HANDLER
-// ============================================================
-
-client.on(
-    "messageCreate",
-    async message => {
-
-        try {
-
-            if (message.author.bot) {
-                return;
-            }
-
-            if (
-                message.channel.type !==
-                ChannelType.DM
-            ) {
-                return;
-            }
-
-            const session =
-                enrolments.get(
-                    message.author.id
-                );
-
-            if (!session) {
-                return;
-            }
-
-            if (session.completed) {
-                return;
-            }
-
-            const question =
-                enrolQuestions[
-                    session.currentQuestion
-                ];
-
-            if (!question) {
-                return;
-            }
-
-            const answer =
-                message.content.trim();
-
-            if (!answer) {
-                return;
-            }
-
-            if (answer.length > 1500) {
-
-                return message.reply(
-                    "That answer is too long. Please keep your response under 1500 characters."
-                );
-
-            }
-
-            session.answers[
-                question.id
-            ] = answer;
-
-            session.currentQuestion++;
-
-            if (
-                session.currentQuestion >=
-                enrolQuestions.length
-            ) {
-
-                session.completed = true;
-
-                return showEnrolmentReview(
-                    message.author
-                );
-
-            }
-
-            await message.reply({
-                embeds: [
-                    createEmbed(
-                        "Answer Saved",
-                        "Your answer has been saved."
-                    )
-                ]
-            });
-
-            await askEnrolmentQuestion(
-                message.author
-            );
-
-        } catch (error) {
-
-            console.error(
-                "DM questionnaire error:",
-                error
-            );
-
-        }
-
-    }
-);
-
-// ============================================================
-// ENROLMENT REVIEW
-// ============================================================
-
-async function showEnrolmentReview(user) {
-
-    const session =
-        enrolments.get(user.id);
-
-    if (!session) return;
-
-    const answers =
-        session.answers;
-
-    const embed =
-        createEmbed(
-            "Review Your Enrolment",
-            "Your questionnaire is complete.\n\n" +
-            "Please check every answer carefully before submitting."
-        )
-        .addFields(
-            {
-                name: "1. School Name",
-                value:
-                    answers.schoolName ||
-                    "Not provided"
-            },
-            {
-                name: "2. School Description",
-                value:
-                    answers.description ||
-                    "Not provided"
-            },
-            {
-                name: "3. Discord Server Invite",
-                value:
-                    answers.invite ||
-                    "Not provided"
-            },
-            {
-                name: "4. Your Role",
-                value:
-                    answers.ownerRole ||
-                    "Not provided"
-            },
-            {
-                name: "5. Approximate Members",
-                value:
-                    answers.members ||
-                    "Not provided"
-            },
-            {
-                name: "6. Reason for Joining",
-                value:
-                    answers.reason ||
-                    "Not provided"
-            }
-        );
-
-    const buttons =
-        new ActionRowBuilder().addComponents(
-
-            new ButtonBuilder()
-                .setCustomId("enrol_submit")
-                .setLabel("Submit Enrolment")
-                .setStyle(ButtonStyle.Success),
-
-            new ButtonBuilder()
-                .setCustomId("enrol_edit")
-                .setLabel("Modify Answers")
-                .setStyle(ButtonStyle.Primary),
-
-            new ButtonBuilder()
-                .setCustomId("enrol_cancel")
-                .setLabel("Cancel")
-                .setStyle(ButtonStyle.Danger)
-
-        );
-
-    return user.send({
-        embeds: [embed],
-        components: [buttons]
-    });
-
-}
-
-// ============================================================
-// MODIFY ANSWERS
-// ============================================================
-
-function editQuestionMenu() {
-
-    const menu =
-        new StringSelectMenuBuilder()
-            .setCustomId(
-                "enrol_edit_question"
-            )
-            .setPlaceholder(
-                "Select an answer to modify"
-            )
-            .addOptions(
-                enrolQuestions.map(
-                    question => ({
-                        label:
-                            `Question ${question.number}`,
-                        description:
-                            question.question.substring(
-                                0,
-                                90
-                            ),
-                        value:
-                            question.id
-                    })
-                )
-            );
-
-    return [
-        new ActionRowBuilder()
-            .addComponents(menu)
-    ];
-
-}
-
-// ============================================================
-// EDIT QUESTION MODAL
-// ============================================================
-
-function createEditModal(
-    question,
-    currentAnswer
-) {
-
-    const modal =
-        new ModalBuilder()
-            .setCustomId(
-                `enrol_edit_modal_${question.id}`
-            )
-            .setTitle(
-                `Edit Question ${question.number}`
-            );
-
-    const input =
-        new TextInputBuilder()
-            .setCustomId("answer")
-            .setLabel(
-                question.question.substring(
-                    0,
-                    45
-                )
-            )
-            .setStyle(
-                question.id === "description" ||
-                question.id === "reason"
-                    ? TextInputStyle.Paragraph
-                    : TextInputStyle.Short
-            )
-            .setRequired(true)
-            .setMaxLength(1500)
-            .setValue(
-                currentAnswer || ""
-            );
-
-    modal.addComponents(
-        new ActionRowBuilder()
-            .addComponents(input)
-    );
-
-    return modal;
-
-}
-
-// ============================================================
-// CREATE REVIEW CHANNEL
-// ============================================================
-
-async function createReviewChannel(
-    guild,
-    user,
-    session
-) {
-
-    const guildConfig =
-        config[guild.id];
-
-    if (
-        !guildConfig?.enrolStaffRoleId
-    ) {
-        throw new Error(
-            "No enrolment staff role configured."
-        );
-    }
-
-    const staffRole =
-        guild.roles.cache.get(
-            guildConfig.enrolStaffRoleId
-        );
-
-    if (!staffRole) {
-        throw new Error(
-            "Configured enrolment staff role does not exist."
-        );
-    }
-
-    const category =
-        guildConfig.enrolReviewCategoryId
-            ? guild.channels.cache.get(
-                guildConfig.enrolReviewCategoryId
-            )
-            : null;
-
-    let baseName =
-        session.answers.schoolName
-            .toLowerCase()
-            .replace(
-                /[^a-z0-9]+/g,
-                "-"
-            )
-            .replace(
-                /^-|-$/g,
-                ""
-            )
-            .substring(0, 60);
-
-    if (!baseName) {
-        baseName = "school";
-    }
-
-    let channelName =
-        `enrol-${baseName}`;
-
-    let counter = 2;
-
-    while (
-        guild.channels.cache.find(
-            channel =>
-                channel.name ===
-                channelName
-        )
-    ) {
-
-        channelName =
-            `enrol-${baseName}-${counter}`;
-
-        counter++;
-
-    }
-
-    const overwrites = [
-
-        {
-            id: guild.roles.everyone.id,
-            deny: [
-                PermissionFlagsBits.ViewChannel
-            ]
-        },
-
-        {
-            id: staffRole.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.ManageMessages
-            ]
-        },
-
-        {
-            id: client.user.id,
-            allow: [
-                PermissionFlagsBits.ViewChannel,
-                PermissionFlagsBits.SendMessages,
-                PermissionFlagsBits.ReadMessageHistory,
-                PermissionFlagsBits.ManageChannels,
-                PermissionFlagsBits.ManageMessages
-            ]
-        }
-
-    ];
-
-    const channel =
-        await guild.channels.create({
-            name: channelName,
-            type: ChannelType.GuildText,
-            parent:
-                category?.type ===
-                ChannelType.GuildCategory
-                    ? category.id
-                    : undefined,
-            permissionOverwrites:
-                overwrites,
-            topic:
-                `RSA School Enrolment Review | ${user.tag}`
-        });
-
-    const embed =
-        createEmbed(
-            "School Enrolment Review",
-            "A new school enrolment is awaiting staff review."
-        )
-        .addFields(
-            {
-                name: "School Name",
-                value:
-                    session.answers.schoolName
-            },
-            {
-                name: "Description",
-                value:
-                    session.answers.description
-            },
-            {
-                name: "Discord Server",
-                value:
-                    session.answers.invite
-            },
-            {
-                name: "Applicant's Role",
-                value:
-                    session.answers.ownerRole
-            },
-            {
-                name: "Approximate Members",
-                value:
-                    session.answers.members
-            },
-            {
-                name: "Reason for Joining",
-                value:
-                    session.answers.reason
-            },
-            {
-                name: "Applicant",
-                value:
-                    `${user}\n${user.tag}\n${user.id}`
-            }
-        );
-
-    const buttons =
-        new ActionRowBuilder().addComponents(
-
-            new ButtonBuilder()
-                .setCustomId(
-                    `enrol_approve_${user.id}`
-                )
-                .setLabel("Approve")
-                .setStyle(ButtonStyle.Success),
-
-            new ButtonBuilder()
-                .setCustomId(
-                    `enrol_deny_${user.id}`
-                )
-                .setLabel("Deny")
-                .setStyle(ButtonStyle.Danger)
-
-        );
-
-    await channel.send({
-        content:
-            `${staffRole} — a new school enrolment requires review.`,
-        embeds: [embed],
-        components: [buttons]
-    });
-
-    return channel;
-
-}
-
-// ============================================================
-// CLEAN APPROVED SCHOOL EMBED
-// ============================================================
-
-function buildApprovedSchoolEmbed(
-    school,
-    approvedBy
-) {
-
-    return createEmbed(
-        "School Enrolled",
-        "A school has officially been enrolled with the **Roblox School Association**."
-    )
-        .addFields(
-            {
-                name: "School",
-                value:
-                    school.schoolName
-            },
-            {
-                name: "Description",
-                value:
-                    school.description
-            },
-            {
-                name: "Discord Server",
-                value:
-                    school.invite
-            },
-            {
-                name: "School Representative",
-                value:
-                    school.ownerRole
-            },
-            {
-                name: "Members",
-                value:
-                    school.members,
-                inline: true
-            },
-            {
-                name: "Status",
-                value:
-                    "Officially Enrolled",
-                inline: true
-            },
-            {
-                name: "Approved By",
-                value:
-                    `${approvedBy}`,
-                inline: true
+                    "`/submitconfig`"
             }
         )
-        .setFooter({
-            text:
-                "Roblox School Association"
-        });
-
+        .setTimestamp();
 }
 
 // ============================================================
-// COMMAND HANDLER
+// INTERACTIONS
 // ============================================================
 
 client.on(
@@ -1572,9 +617,7 @@ client.on(
             // SLASH COMMANDS
             // ====================================================
 
-            if (
-                interaction.isChatInputCommand()
-            ) {
+            if (interaction.isChatInputCommand()) {
 
                 const command =
                     interaction.commandName;
@@ -1591,7 +634,6 @@ client.on(
                         ],
                         ephemeral: true
                     });
-
                 }
 
                 // ==================================================
@@ -1601,15 +643,10 @@ client.on(
                 if (command === "ping") {
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Pong!",
-                                `WebSocket latency: **${client.ws.ping}ms**`
-                            )
-                        ],
+                        content:
+                            `Pong! ${client.ws.ping}ms`,
                         ephemeral: true
                     });
-
                 }
 
                 // ==================================================
@@ -1621,31 +658,13 @@ client.on(
                     return interaction.reply({
                         embeds: [
                             createEmbed(
-                                "Bot Information"
+                                "Bot Information",
+                                `**Bot:** ${client.user.tag}\n` +
+                                `**Servers:** ${client.guilds.cache.size}\n` +
+                                `**Discord.js:** v14`
                             )
-                                .addFields(
-                                    {
-                                        name: "Bot",
-                                        value:
-                                            client.user.tag,
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Servers",
-                                        value:
-                                            `${client.guilds.cache.size}`,
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Discord.js",
-                                        value:
-                                            "v14",
-                                        inline: true
-                                    }
-                                )
                         ]
                     });
-
                 }
 
                 // ==================================================
@@ -1660,48 +679,14 @@ client.on(
                     return interaction.reply({
                         embeds: [
                             createEmbed(
-                                "Server Information"
+                                guild.name,
+                                `**Owner:** <@${guild.ownerId}>\n` +
+                                `**Members:** ${guild.memberCount}\n` +
+                                `**Channels:** ${guild.channels.cache.size}\n` +
+                                `**Roles:** ${guild.roles.cache.size}`
                             )
-                                .setThumbnail(
-                                    guild.iconURL({
-                                        size: 256
-                                    })
-                                )
-                                .addFields(
-                                    {
-                                        name: "Server",
-                                        value:
-                                            guild.name,
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Owner",
-                                        value:
-                                            `<@${guild.ownerId}>`,
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Members",
-                                        value:
-                                            `${guild.memberCount}`,
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Channels",
-                                        value:
-                                            `${guild.channels.cache.size}`,
-                                        inline: true
-                                    },
-                                    {
-                                        name: "Roles",
-                                        value:
-                                            `${guild.roles.cache.size}`,
-                                        inline: true
-                                    }
-                                )
                         ]
                     });
-
                 }
 
                 // ==================================================
@@ -1717,78 +702,36 @@ client.on(
                         interaction.user;
 
                     const member =
-                        await interaction.guild
-                            .members
+                        await interaction.guild.members
                             .fetch(user.id)
-                            .catch(
-                                () => null
-                            );
+                            .catch(() => null);
 
                     const embed =
                         createEmbed(
-                            "User Information"
+                            "User Information",
+                            `**Username:** ${user.tag}\n` +
+                            `**User ID:** ${user.id}\n` +
+                            `**Created:** <t:${Math.floor(
+                                user.createdTimestamp / 1000
+                            )}:F>`
                         )
-                            .setThumbnail(
-                                user.displayAvatarURL()
-                            )
-                            .addFields(
-                                {
-                                    name: "Username",
-                                    value:
-                                        user.tag,
-                                    inline: true
-                                },
-                                {
-                                    name: "User ID",
-                                    value:
-                                        user.id,
-                                    inline: true
-                                },
-                                {
-                                    name: "Account Created",
-                                    value:
-                                        `<t:${Math.floor(
-                                            user.createdTimestamp / 1000
-                                        )}:F>`
-                                }
-                            );
-
-                    if (member) {
-
-                        embed.addFields(
-                            {
-                                name: "Joined Server",
-                                value:
-                                    `<t:${Math.floor(
-                                        member.joinedTimestamp / 1000
-                                    )}:F`
-                            },
-                            {
-                                name: "Roles",
-                                value:
-                                    member.roles.cache
-                                        .filter(
-                                            role =>
-                                                role.id !==
-                                                interaction.guild.id
-                                        )
-                                        .map(
-                                            role =>
-                                                role.toString()
-                                        )
-                                        .join(
-                                            ", "
-                                        ) ||
-                                    "None"
-                            }
+                        .setThumbnail(
+                            user.displayAvatarURL()
                         );
 
+                    if (member?.joinedTimestamp) {
+                        embed.addFields({
+                            name: "Joined Server",
+                            value:
+                                `<t:${Math.floor(
+                                    member.joinedTimestamp / 1000
+                                )}:F>`
+                        });
                     }
 
                     return interaction.reply({
                         embeds: [embed]
                     });
-
                 }
 
                 // ==================================================
@@ -1803,46 +746,29 @@ client.on(
                     return interaction.reply({
                         embeds: [
                             createEmbed(
-                                `${interaction.user.username}'s Profile`
+                                `${interaction.user.username}'s Profile`,
+                                `**Username:** ${interaction.user.tag}\n` +
+                                `**Joined:** <t:${Math.floor(
+                                    member.joinedTimestamp / 1000
+                                )}:R>\n\n` +
+                                `**Roles:** ${
+                                    member.roles.cache
+                                        .filter(
+                                            role =>
+                                                role.id !==
+                                                interaction.guild.id
+                                        )
+                                        .map(role =>
+                                            role.toString()
+                                        )
+                                        .join(", ") ||
+                                    "None"
+                                }`
+                            ).setThumbnail(
+                                interaction.user.displayAvatarURL()
                             )
-                                .setThumbnail(
-                                    interaction.user.displayAvatarURL()
-                                )
-                                .addFields(
-                                    {
-                                        name: "Username",
-                                        value:
-                                            interaction.user.tag
-                                    },
-                                    {
-                                        name: "Joined",
-                                        value:
-                                            `<t:${Math.floor(
-                                                member.joinedTimestamp / 1000
-                                            )}:R>`
-                                    },
-                                    {
-                                        name: "Roles",
-                                        value:
-                                            member.roles.cache
-                                                .filter(
-                                                    role =>
-                                                        role.id !==
-                                                        interaction.guild.id
-                                                )
-                                                .map(
-                                                    role =>
-                                                        role.toString()
-                                                )
-                                                .join(
-                                                    ", "
-                                                ) ||
-                                            "None"
-                                    }
-                                )
                         ]
                     });
-
                 }
 
                 // ==================================================
@@ -1863,21 +789,16 @@ client.on(
                         "No reason provided";
 
                     const member =
-                        await interaction.guild
-                            .members
+                        await interaction.guild.members
                             .fetch(user.id)
-                            .catch(
-                                () => null
-                            );
+                            .catch(() => null);
 
                     if (!member) {
-
                         return interaction.reply({
                             content:
                                 "That member is not in this server.",
                             ephemeral: true
                         });
-
                     }
 
                     await member.ban({
@@ -1885,14 +806,9 @@ client.on(
                     });
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Member Banned",
-                                `**${user.tag}** has been banned.\n\n**Reason:** ${reason}`
-                            )
-                        ]
+                        content:
+                            `Banned **${user.tag}**.\nReason: ${reason}`
                     });
-
                 }
 
                 // ==================================================
@@ -1913,36 +829,24 @@ client.on(
                         "No reason provided";
 
                     const member =
-                        await interaction.guild
-                            .members
+                        await interaction.guild.members
                             .fetch(user.id)
-                            .catch(
-                                () => null
-                            );
+                            .catch(() => null);
 
                     if (!member) {
-
                         return interaction.reply({
                             content:
                                 "That member is not in this server.",
                             ephemeral: true
                         });
-
                     }
 
-                    await member.kick(
-                        reason
-                    );
+                    await member.kick(reason);
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Member Kicked",
-                                `**${user.tag}** has been kicked.\n\n**Reason:** ${reason}`
-                            )
-                        ]
+                        content:
+                            `Kicked **${user.tag}**.\nReason: ${reason}`
                     });
-
                 }
 
                 // ==================================================
@@ -1968,21 +872,16 @@ client.on(
                         "No reason provided";
 
                     const member =
-                        await interaction.guild
-                            .members
+                        await interaction.guild.members
                             .fetch(user.id)
-                            .catch(
-                                () => null
-                            );
+                            .catch(() => null);
 
                     if (!member) {
-
                         return interaction.reply({
                             content:
                                 "Member not found.",
                             ephemeral: true
                         });
-
                     }
 
                     await member.timeout(
@@ -1991,14 +890,9 @@ client.on(
                     );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Member Timed Out",
-                                `**${user.tag}** has been timed out for **${minutes} minute(s)**.\n\n**Reason:** ${reason}`
-                            )
-                        ]
+                        content:
+                            `Timed out **${user.tag}** for ${minutes} minute(s).`
                     });
-
                 }
 
                 // ==================================================
@@ -2013,36 +907,24 @@ client.on(
                         );
 
                     const member =
-                        await interaction.guild
-                            .members
+                        await interaction.guild.members
                             .fetch(user.id)
-                            .catch(
-                                () => null
-                            );
+                            .catch(() => null);
 
                     if (!member) {
-
                         return interaction.reply({
                             content:
                                 "Member not found.",
                             ephemeral: true
                         });
-
                     }
 
-                    await member.timeout(
-                        null
-                    );
+                    await member.timeout(null);
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Timeout Removed",
-                                `The timeout has been removed from **${user.tag}**.`
-                            )
-                        ]
+                        content:
+                            `Removed timeout from **${user.tag}**.`
                     });
-
                 }
 
                 // ==================================================
@@ -2061,14 +943,8 @@ client.on(
                             "reason"
                         );
 
-                    if (
-                        !warnings[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        warnings[
-                            interaction.guild.id
-                        ] = {};
+                    if (!warnings[interaction.guild.id]) {
+                        warnings[interaction.guild.id] = {};
                     }
 
                     if (
@@ -2087,8 +963,7 @@ client.on(
                         reason,
                         moderator:
                             interaction.user.id,
-                        timestamp:
-                            Date.now()
+                        timestamp: Date.now()
                     });
 
                     saveJSON(
@@ -2097,14 +972,9 @@ client.on(
                     );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Member Warned",
-                                `**${user.tag}** has received a warning.\n\n**Reason:** ${reason}`
-                            )
-                        ]
+                        content:
+                            `Warned **${user.tag}**.\nReason: ${reason}`
                     });
-
                 }
 
                 // ==================================================
@@ -2122,42 +992,29 @@ client.on(
                     const list =
                         warnings[
                             interaction.guild.id
-                        ]?.[user.id] ||
-                        [];
+                        ]?.[user.id] || [];
 
                     if (!list.length) {
-
                         return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Warnings",
-                                    `**${user.tag}** has no recorded warnings.`
-                                )
-                            ],
+                            content:
+                                `**${user.tag}** has no warnings.`,
                             ephemeral: true
                         });
-
                     }
-
-                    const description =
-                        list
-                            .map(
-                                (warning, index) =>
-                                    `**${index + 1}.** ${warning.reason}\nModerator: <@${warning.moderator}>`
-                            )
-                            .join(
-                                "\n\n"
-                            );
 
                     return interaction.reply({
                         embeds: [
                             createEmbed(
                                 `Warnings — ${user.tag}`,
-                                description
+                                list
+                                    .map(
+                                        (warning, index) =>
+                                            `**${index + 1}.** ${warning.reason} — <@${warning.moderator}>`
+                                    )
+                                    .join("\n")
                             )
                         ]
                     });
-
                 }
 
                 // ==================================================
@@ -2171,11 +1028,7 @@ client.on(
                             "user"
                         );
 
-                    if (
-                        warnings[
-                            interaction.guild.id
-                        ]
-                    ) {
+                    if (warnings[interaction.guild.id]) {
                         delete warnings[
                             interaction.guild.id
                         ][user.id];
@@ -2187,14 +1040,9 @@ client.on(
                     );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Warnings Cleared",
-                                `All warnings for **${user.tag}** have been cleared.`
-                            )
-                        ]
+                        content:
+                            `Cleared warnings for **${user.tag}**.`
                     });
-
                 }
 
                 // ==================================================
@@ -2214,15 +1062,10 @@ client.on(
                     );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Messages Deleted",
-                                `Deleted **${amount}** message(s).`
-                            )
-                        ],
+                        content:
+                            `Deleted ${amount} message(s).`,
                         ephemeral: true
                     });
-
                 }
 
                 // ==================================================
@@ -2232,24 +1075,17 @@ client.on(
                 if (command === "lock") {
 
                     await interaction.channel
-                        .permissionOverwrites
-                        .edit(
+                        .permissionOverwrites.edit(
                             interaction.guild.roles.everyone,
                             {
-                                SendMessages:
-                                    false
+                                SendMessages: false
                             }
                         );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Channel Locked",
-                                "This channel has been locked."
-                            )
-                        ]
+                        content:
+                            "Channel locked."
                     });
-
                 }
 
                 // ==================================================
@@ -2259,24 +1095,17 @@ client.on(
                 if (command === "unlock") {
 
                     await interaction.channel
-                        .permissionOverwrites
-                        .edit(
+                        .permissionOverwrites.edit(
                             interaction.guild.roles.everyone,
                             {
-                                SendMessages:
-                                    null
+                                SendMessages: null
                             }
                         );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Channel Unlocked",
-                                "This channel has been unlocked."
-                            )
-                        ]
+                        content:
+                            "Channel unlocked."
                     });
-
                 }
 
                 // ==================================================
@@ -2296,16 +1125,11 @@ client.on(
                         );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Slowmode Updated",
-                                seconds === 0
-                                    ? "Slowmode has been disabled."
-                                    : `Slowmode has been set to **${seconds} seconds**.`
-                            )
-                        ]
+                        content:
+                            seconds === 0
+                                ? "Slowmode disabled."
+                                : `Slowmode set to ${seconds} seconds.`
                     });
-
                 }
 
                 // ==================================================
@@ -2315,85 +1139,46 @@ client.on(
                 if (command === "role") {
 
                     const sub =
-                        interaction.options
-                            .getSubcommand();
+                        interaction.options.getSubcommand();
 
                     const member =
-                        interaction.options
-                            .getMember(
-                                "user"
-                            );
+                        interaction.options.getMember(
+                            "user"
+                        );
 
                     const role =
-                        interaction.options
-                            .getRole(
-                                "role"
-                            );
+                        interaction.options.getRole(
+                            "role"
+                        );
 
                     if (
                         role.position >=
                         interaction.member.roles.highest.position
                     ) {
+                        return interaction.reply({
+                            content:
+                                "You cannot manage that role.",
+                            ephemeral: true
+                        });
+                    }
+
+                    if (sub === "add") {
+                        await member.roles.add(role);
 
                         return interaction.reply({
                             content:
-                                "You cannot manage that role because it is above or equal to your highest role.",
-                            ephemeral: true
+                                `Added ${role} to **${member.user.tag}**.`
                         });
-
                     }
 
-                    if (
-                        role.position >=
-                        interaction.guild.members.me.roles.highest.position
-                    ) {
+                    if (sub === "remove") {
+                        await member.roles.remove(role);
 
                         return interaction.reply({
                             content:
-                                "I cannot manage that role because it is above my highest role.",
-                            ephemeral: true
+                                `Removed ${role} from **${member.user.tag}**.`
                         });
-
                     }
-
-                    if (
-                        sub === "add"
-                    ) {
-
-                        await member.roles.add(
-                            role
-                        );
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Role Added",
-                                    `Added ${role} to **${member.user.tag}**.`
-                                )
-                            ]
-                        });
-
-                    }
-
-                    if (
-                        sub === "remove"
-                    ) {
-
-                        await member.roles.remove(
-                            role
-                        );
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Role Removed",
-                                    `Removed ${role} from **${member.user.tag}**.`
-                                )
-                            ]
-                        });
-
-                    }
-
                 }
 
                 // ==================================================
@@ -2412,18 +1197,16 @@ client.on(
                             createEmbed(
                                 "Announcement",
                                 message
-                            )
-                                .setFooter({
-                                    text:
-                                        `Posted by ${interaction.user.tag}`
-                                })
+                            ).setFooter({
+                                text:
+                                    `Posted by ${interaction.user.tag}`
+                            })
                         ]
                     });
-
                 }
 
                 // ==================================================
-                // EMBED
+                // WEBHOOK EMBED
                 // ==================================================
 
                 if (command === "embed") {
@@ -2438,803 +1221,239 @@ client.on(
                             "description"
                         );
 
-                    return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                title,
+                    const channel =
+                        interaction.options.getChannel(
+                            "channel"
+                        );
+
+                    if (
+                        !channel ||
+                        channel.type !==
+                            ChannelType.GuildText
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "Please select a text channel.",
+                            ephemeral: true
+                        });
+                    }
+
+                    const webhooks =
+                        await channel.fetchWebhooks();
+
+                    let webhook =
+                        webhooks.find(
+                            hook =>
+                                hook.owner?.id ===
+                                client.user.id
+                        );
+
+                    if (!webhook) {
+
+                        webhook =
+                            await channel.createWebhook({
+                                name: "Server Listings"
+                            });
+                    }
+
+                    const embed =
+                        new EmbedBuilder()
+                            .setColor(BRAND_COLOUR)
+                            .setTitle(
+                                `${LOGO} ${title}`
+                            )
+                            .setDescription(
                                 description
                             )
-                        ]
+                            .setTimestamp();
+
+                    await webhook.send({
+                        username: "Server Listings",
+                        avatarURL:
+                            client.user.displayAvatarURL(),
+                        embeds: [embed]
                     });
 
+                    return interaction.reply({
+                        content:
+                            `Webhook embed sent to ${channel}.`,
+                        ephemeral: true
+                    });
                 }
 
                 // ==================================================
                 // TICKET CONFIG
                 // ==================================================
 
-                if (
-                    command ===
-                    "ticketconfig"
-                ) {
-
-                    return interaction.reply({
-                        embeds: [
-                            buildTicketConfigEmbed(
-                                interaction.guild
-                            )
-                        ],
-                        components:
-                            ticketConfigComponents(),
-                        ephemeral: true
-                    });
-
-                }
-
-                // ==================================================
-                // ENROL SCHOOL
-                // ==================================================
-
-                if (
-                    command ===
-                    "enrolschool"
-                ) {
-
-                    try {
-
-                        await interaction.user.send({
-                            embeds: [
-                                createEmbed(
-                                    "School Enrolment",
-                                    "You have started a **Roblox School Association** enrolment.\n\n" +
-                                    "The questionnaire will be completed privately in this DM.\n\n" +
-                                    "Click **Start Questionnaire** to begin."
-                                )
-                            ],
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-                                        new ButtonBuilder()
-                                            .setCustomId(
-                                                `enrol_start_${interaction.guild.id}`
-                                            )
-                                            .setLabel(
-                                                "Start Questionnaire"
-                                            )
-                                            .setStyle(
-                                                ButtonStyle.Primary
-                                            )
-                                    )
-                            ]
-                        });
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Check Your DMs",
-                                    "I've sent you the school enrolment questionnaire in a private DM."
-                                )
-                            ],
-                            ephemeral: true
-                        });
-
-                    } catch (error) {
-
-                        console.error(
-                            "Could not DM enrolment:",
-                            error
-                        );
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Unable to Start",
-                                    "I couldn't send you a DM. Please enable DMs from server members and try again."
-                                )
-                            ],
-                            ephemeral: true
-                        });
-
-                    }
-
-                }
-
-                // ==================================================
-                // ENROL CONFIG
-                // ==================================================
-
-                if (
-                    command ===
-                    "enrolconfig"
-                ) {
+                if (command === "ticketconfig") {
 
                     if (
                         !canManage(
                             interaction.member
                         )
                     ) {
-
                         return interaction.reply({
                             content:
-                                "You need Manage Server permissions to use this.",
+                                "You need Manage Server permissions.",
                             ephemeral: true
                         });
-
                     }
 
-                    return interaction.reply({
-                        embeds: [
-                            buildEnrolConfigEmbed(
-                                interaction.guild
-                            )
-                        ],
-                        components:
-                            enrolConfigComponents(),
-                        ephemeral: true
-                    });
-
+                    return sendTicketConfigPanel(
+                        interaction
+                    );
                 }
 
+                // ==================================================
+                // SUBMIT CONFIG
+                // ==================================================
+
+                if (command === "submitconfig") {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "You need Manage Server permissions.",
+                            ephemeral: true
+                        });
+                    }
+
+                    return sendSubmitConfigPanel(
+                        interaction
+                    );
+                }
             }
 
             // ====================================================
             // BUTTONS
             // ====================================================
 
-            if (
-                interaction.isButton()
-            ) {
+            if (interaction.isButton()) {
 
                 // ==================================================
-                // START QUESTIONNAIRE
-                // ==================================================
-
-                if (
-                    interaction.customId.startsWith(
-                        "enrol_start_"
-                    )
-                ) {
-
-                    const guildId =
-                        interaction.customId.replace(
-                            "enrol_start_",
-                            ""
-                        );
-
-                    const guild =
-                        client.guilds.cache.get(
-                            guildId
-                        );
-
-                    if (!guild) {
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Error",
-                                    "I couldn't find the server connected to this enrolment."
-                                )
-                            ]
-                        });
-
-                    }
-
-                    if (
-                        enrolments.has(
-                            interaction.user.id
-                        )
-                    ) {
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Already Started",
-                                    "You already have an active enrolment questionnaire."
-                                )
-                            ]
-                        });
-
-                    }
-
-                    await interaction.deferUpdate();
-
-                    await startEnrolment(
-                        interaction.user,
-                        guild
-                    );
-
-                    return;
-
-                }
-
-                // ==================================================
-                // SUBMIT ENROLMENT
+                // TICKET PANEL
                 // ==================================================
 
                 if (
                     interaction.customId ===
-                    "enrol_submit"
+                    "open_ticket"
                 ) {
-
-                    const session =
-                        enrolments.get(
-                            interaction.user.id
-                        );
-
-                    if (!session) {
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Enrolment Expired",
-                                    "Your questionnaire could not be found. Please run `/enrolschool` again."
-                                )
-                            ]
-                        });
-
-                    }
-
-                    const guild =
-                        client.guilds.cache.get(
-                            session.guildId
-                        );
-
-                    if (!guild) {
-
-                        return interaction.reply({
-                            embeds: [
-                                createEmbed(
-                                    "Error",
-                                    "The server associated with this enrolment could not be found."
-                                )
-                            ]
-                        });
-
-                    }
-
-                    await interaction.deferUpdate();
-
-                    try {
-
-                        const reviewChannel =
-                            await createReviewChannel(
-                                guild,
-                                interaction.user,
-                                session
-                            );
-
-                        enrolments.delete(
-                            interaction.user.id
-                        );
-
-                        await interaction.editReply({
-                            embeds: [
-                                createEmbed(
-                                    "Enrolment Submitted",
-                                    "Your school enrolment has been submitted successfully.\n\n" +
-                                    "The RSA staff team will now review your application.\n\n" +
-                                    "You will receive a DM when a decision has been made."
-                                )
-                            ],
-                            components: []
-                        });
-
-                    } catch (error) {
-
-                        console.error(
-                            "Enrolment submission error:",
-                            error
-                        );
-
-                        return interaction.editReply({
-                            embeds: [
-                                createEmbed(
-                                    "Submission Failed",
-                                    "I couldn't create the private review channel. Please contact an RSA administrator."
-                                )
-                            ]
-                        });
-
-                    }
-
-                    return;
-
-                }
-
-                // ==================================================
-                // MODIFY ANSWERS
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrol_edit"
-                ) {
-
-                    return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Modify Your Answers",
-                                "Select the question you would like to change."
-                            )
-                        ],
-                        components:
-                            editQuestionMenu()
-                    });
-
-                }
-
-                // ==================================================
-                // CANCEL ENROLMENT
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrol_cancel"
-                ) {
-
-                    enrolments.delete(
-                        interaction.user.id
-                    );
-
-                    return interaction.update({
-                        embeds: [
-                            createEmbed(
-                                "Enrolment Cancelled",
-                                "Your school enrolment questionnaire has been cancelled."
-                            )
-                        ],
-                        components: []
-                    });
-
-                }
-
-                // ==================================================
-                // APPROVE
-                // ==================================================
-
-                if (
-                    interaction.customId.startsWith(
-                        "enrol_approve_"
-                    )
-                ) {
-
-                    if (
-                        !isStaff(
-                            interaction.member
-                        )
-                    ) {
-
-                        return interaction.reply({
-                            content:
-                                "You do not have permission to approve enrolments.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const applicantId =
-                        interaction.customId.replace(
-                            "enrol_approve_",
-                            ""
-                        );
-
-                    const reviewMessage =
-                        interaction.message;
-
-                    const applicant =
-                        await interaction.guild
-                            .members
-                            .fetch(
-                                applicantId
-                            )
-                            .catch(
-                                () => null
-                            );
-
-                    if (!applicant) {
-
-                        return interaction.reply({
-                            content:
-                                "The applicant is no longer in this server.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const originalEmbed =
-                        reviewMessage.embeds[0];
-
-                    if (!originalEmbed) {
-
-                        return interaction.reply({
-                            content:
-                                "The enrolment information could not be found.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const fields =
-                        originalEmbed.fields;
-
-                    const getField =
-                        name => {
-
-                            const field =
-                                fields.find(
-                                    item =>
-                                        item.name ===
-                                        name
-                                );
-
-                            return (
-                                field?.value ||
-                                "Not provided"
-                            );
-
-                        };
-
-                    const school = {
-
-                        schoolName:
-                            getField(
-                                "School Name"
-                            ),
-
-                        description:
-                            getField(
-                                "Description"
-                            ),
-
-                        invite:
-                            getField(
-                                "Discord Server"
-                            ),
-
-                        ownerRole:
-                            getField(
-                                "Applicant's Role"
-                            ),
-
-                        members:
-                            getField(
-                                "Approximate Members"
-                            ),
-
-                        reason:
-                            getField(
-                                "Reason for Joining"
-                            )
-
-                    };
-
-                    await interaction.deferUpdate();
-
-                    try {
-
-                        const approvedRole =
-                            config[
-                                interaction.guild.id
-                            ]?.enrolApprovedRoleId;
-
-                        if (approvedRole) {
-
-                            const role =
-                                interaction.guild
-                                    .roles
-                                    .cache.get(
-                                        approvedRole
-                                    );
-
-                            if (role) {
-
-                                await applicant.roles.add(
-                                    role
-                                );
-
-                            }
-
-                        }
-
-                        const enrolChannelId =
-                            config[
-                                interaction.guild.id
-                            ]?.enrolChannelId;
-
-                        const enrolChannel =
-                            enrolChannelId
-                                ? interaction.guild
-                                    .channels
-                                    .cache.get(
-                                        enrolChannelId
-                                    )
-                                : null;
-
-                        // ------------------------------------------
-                        // CLEAN PUBLIC ENROLMENT EMBED
-                        // ------------------------------------------
-
-                        if (
-                            enrolChannel &&
-                            enrolChannel.isTextBased()
-                        ) {
-
-                            await enrolChannel.send({
-                                embeds: [
-                                    buildApprovedSchoolEmbed(
-                                        school,
-                                        interaction.user
-                                    )
-                                ]
-                            });
-
-                        }
-
-                        await applicant.user.send({
-                            embeds: [
-                                createEmbed(
-                                    "School Enrolment Approved",
-                                    `Congratulations! Your school, **${school.schoolName}**, has been officially enrolled with the **Roblox School Association**.\n\n` +
-                                    "Thank you for joining the RSA."
-                                )
-                            ]
-                        }).catch(
-                            () => {}
-                        );
-
-                        // Disable buttons after decision.
-                        await interaction.message.edit({
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-
-                                        new ButtonBuilder()
-                                            .setCustomId(
-                                                "enrol_decision_complete"
-                                            )
-                                            .setLabel(
-                                                "Approved"
-                                            )
-                                            .setStyle(
-                                                ButtonStyle.Success
-                                            )
-                                            .setDisabled(
-                                                true
-                                            )
-
-                                    )
-                            ]
-                        });
-
-                        await interaction.channel.send({
-                            embeds: [
-                                createEmbed(
-                                    "Enrolment Approved",
-                                    `This enrolment has been approved by ${interaction.user}.\n\n` +
-                                    `The clean school announcement has been sent to the configured enrolment channel.`
-                                )
-                            ]
-                        });
-
-                    } catch (error) {
-
-                        console.error(
-                            "Approval error:",
-                            error
-                        );
-
-                        return interaction.followUp({
-                            content:
-                                "The approval could not be completed.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    return;
-
-                }
-
-                // ==================================================
-                // DENY
-                // ==================================================
-
-                if (
-                    interaction.customId.startsWith(
-                        "enrol_deny_"
-                    )
-                ) {
-
-                    if (
-                        !isStaff(
-                            interaction.member
-                        )
-                    ) {
-
-                        return interaction.reply({
-                            content:
-                                "You do not have permission to deny enrolments.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const applicantId =
-                        interaction.customId.replace(
-                            "enrol_deny_",
-                            ""
-                        );
-
-                    const modal =
-                        new ModalBuilder()
-                            .setCustomId(
-                                `enrol_deny_modal_${applicantId}`
-                            )
-                            .setTitle(
-                                "Deny School Enrolment"
-                            );
-
-                    const reason =
-                        new TextInputBuilder()
-                            .setCustomId(
-                                "reason"
-                            )
-                            .setLabel(
-                                "Reason for denial"
-                            )
-                            .setStyle(
-                                TextInputStyle.Paragraph
-                            )
-                            .setRequired(
-                                true
-                            )
-                            .setMaxLength(
-                                1000
-                            );
-
-                    modal.addComponents(
-                        new ActionRowBuilder()
-                            .addComponents(
-                                reason
-                            )
-                    );
-
-                    return interaction.showModal(
-                        modal
-                    );
-
-                }
-
-                // ==================================================
-                // TICKET CREATE
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "ticket_create"
-                ) {
-
-                    await interaction.deferReply({
-                        ephemeral: true
-                    });
 
                     const guildConfig =
-                        config[
+                        getGuildConfig(
                             interaction.guild.id
-                        ] || {};
+                        );
 
-                    const staffRole =
-                        guildConfig.ticketStaffRoleId
-                            ? interaction.guild
-                                .roles
-                                .cache.get(
-                                    guildConfig.ticketStaffRoleId
-                                )
-                            : null;
-
-                    const category =
-                        guildConfig.ticketCategoryId
-                            ? interaction.guild
-                                .channels
-                                .cache.get(
-                                    guildConfig.ticketCategoryId
-                                )
-                            : null;
-
-                    if (!staffRole) {
-
-                        return interaction.editReply({
+                    if (
+                        !guildConfig.ticketStaffRoleId
+                    ) {
+                        return interaction.reply({
                             content:
-                                "The ticket staff role has not been configured. An administrator needs to use `/ticketconfig`."
+                                "The ticket system has not been configured.",
+                            ephemeral: true
                         });
-
                     }
 
                     const existing =
                         interaction.guild.channels.cache.find(
                             channel =>
-                                channel.name ===
-                                `ticket-${interaction.user.id}`
+                                channel.topic ===
+                                `ticket-owner:${interaction.user.id}`
                         );
 
                     if (existing) {
-
-                        return interaction.editReply({
+                        return interaction.reply({
                             content:
-                                `You already have an open ticket: ${existing}`
+                                `You already have a ticket: ${existing}`,
+                            ephemeral: true
                         });
-
                     }
 
+                    const staffRole =
+                        interaction.guild.roles.cache.get(
+                            guildConfig.ticketStaffRoleId
+                        );
+
                     const channel =
-                        await interaction.guild
-                            .channels
-                            .create({
-                                name:
-                                    `ticket-${interaction.user.id}`,
-                                type:
-                                    ChannelType.GuildText,
-                                parent:
-                                    category?.type ===
-                                    ChannelType.GuildCategory
-                                        ? category.id
-                                        : undefined,
-                                permissionOverwrites: [
+                        await interaction.guild.channels.create({
+                            name:
+                                `ticket-${interaction.user.username}`
+                                    .toLowerCase()
+                                    .replace(
+                                        /[^a-z0-9-]/g,
+                                        ""
+                                    )
+                                    .substring(0, 70),
+                            type:
+                                ChannelType.GuildText,
+                            topic:
+                                `ticket-owner:${interaction.user.id}`,
+                            permissionOverwrites: [
+                                {
+                                    id:
+                                        interaction.guild
+                                            .roles
+                                            .everyone.id,
+                                    deny: [
+                                        PermissionFlagsBits.ViewChannel
+                                    ]
+                                },
+                                {
+                                    id:
+                                        interaction.user.id,
+                                    allow: [
+                                        PermissionFlagsBits.ViewChannel,
+                                        PermissionFlagsBits.SendMessages,
+                                        PermissionFlagsBits.ReadMessageHistory
+                                    ]
+                                },
+                                {
+                                    id:
+                                        staffRole.id,
+                                    allow: [
+                                        PermissionFlagsBits.ViewChannel,
+                                        PermissionFlagsBits.SendMessages,
+                                        PermissionFlagsBits.ReadMessageHistory,
+                                        PermissionFlagsBits.ManageMessages
+                                    ]
+                                },
+                                {
+                                    id:
+                                        client.user.id,
+                                    allow: [
+                                        PermissionFlagsBits.ViewChannel,
+                                        PermissionFlagsBits.SendMessages,
+                                        PermissionFlagsBits.ReadMessageHistory,
+                                        PermissionFlagsBits.ManageChannels
+                                    ]
+                                }
+                            ]
+                        });
 
-                                    {
-                                        id:
-                                            interaction.guild
-                                                .roles
-                                                .everyone.id,
-                                        deny: [
-                                            PermissionFlagsBits.ViewChannel
-                                        ]
-                                    },
-
-                                    {
-                                        id:
-                                            interaction.user.id,
-                                        allow: [
-                                            PermissionFlagsBits.ViewChannel,
-                                            PermissionFlagsBits.SendMessages,
-                                            PermissionFlagsBits.ReadMessageHistory
-                                        ]
-                                    },
-
-                                    {
-                                        id:
-                                            staffRole.id,
-                                        allow: [
-                                            PermissionFlagsBits.ViewChannel,
-                                            PermissionFlagsBits.SendMessages,
-                                            PermissionFlagsBits.ReadMessageHistory,
-                                            PermissionFlagsBits.ManageMessages
-                                        ]
-                                    },
-
-                                    {
-                                        id:
-                                            client.user.id,
-                                        allow: [
-                                            PermissionFlagsBits.ViewChannel,
-                                            PermissionFlagsBits.SendMessages,
-                                            PermissionFlagsBits.ReadMessageHistory,
-                                            PermissionFlagsBits.ManageChannels
-                                        ]
-                                    }
-
-                                ]
-                            });
-
-                    const closeButton =
+                    const ticketButtons =
                         new ActionRowBuilder()
                             .addComponents(
                                 new ButtonBuilder()
                                     .setCustomId(
-                                        "ticket_close"
+                                        "claim_ticket"
                                     )
                                     .setLabel(
-                                        "Close Ticket"
+                                        "Claim"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Primary
+                                    ),
+
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "close_ticket"
+                                    )
+                                    .setLabel(
+                                        "Close"
                                     )
                                     .setStyle(
                                         ButtonStyle.Danger
@@ -3247,383 +1466,521 @@ client.on(
                         embeds: [
                             createEmbed(
                                 "Support Ticket",
-                                `Welcome ${interaction.user}.\n\n` +
-                                "Please explain your enquiry and a member of the RSA team will assist you."
+                                `Welcome ${interaction.user}!\n\n` +
+                                "Please explain what you need help with. " +
+                                "A member of staff will assist you shortly."
                             )
                         ],
                         components: [
-                            closeButton
+                            ticketButtons
                         ]
                     });
 
-                    return interaction.editReply({
+                    return interaction.reply({
                         content:
-                            `Your ticket has been created: ${channel}`
+                            `Your ticket has been created: ${channel}`,
+                        ephemeral: true
                     });
-
                 }
 
                 // ==================================================
-                // TICKET CLOSE
+                // CLAIM TICKET
                 // ==================================================
 
                 if (
                     interaction.customId ===
-                    "ticket_close"
+                    "claim_ticket"
                 ) {
 
-                    const guildConfig =
-                        config[
-                            interaction.guild.id
-                        ] || {};
-
-                    const staffRole =
-                        guildConfig.ticketStaffRoleId
-                            ? interaction.guild
-                                .roles
-                                .cache.get(
-                                    guildConfig.ticketStaffRoleId
-                                )
-                            : null;
-
                     if (
-                        !staffRole ||
-                        !interaction.member.roles.cache.has(
-                            staffRole.id
+                        !isStaff(
+                            interaction.member
                         )
                     ) {
-
                         return interaction.reply({
                             content:
-                                "Only ticket staff can close this ticket.",
+                                "Only staff can claim tickets.",
                             ephemeral: true
                         });
+                    }
 
+                    return interaction.reply({
+                        embeds: [
+                            createEmbed(
+                                "Ticket Claimed",
+                                `This ticket has been claimed by ${interaction.user}.`
+                            )
+                        ]
+                    });
+                }
+
+                // ==================================================
+                // CLOSE TICKET
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "close_ticket"
+                ) {
+
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "Only staff can close tickets.",
+                            ephemeral: true
+                        });
                     }
 
                     await interaction.reply({
                         embeds: [
                             createEmbed(
-                                "Ticket Closing",
-                                "This ticket will be deleted in 5 seconds."
+                                "Ticket Closed",
+                                `This ticket will be deleted in 5 seconds.\n\nClosed by ${interaction.user}.`
                             )
                         ]
                     });
 
                     setTimeout(
-                        () => {
+                        () =>
                             interaction.channel
                                 .delete()
-                                .catch(
-                                    () => {}
-                                );
-                        },
+                                .catch(() => {}),
                         5000
                     );
 
                     return;
-
                 }
 
                 // ==================================================
-                // ENROLMENT CONFIG BUTTONS
+                // SUBMIT SERVER
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "submit_server"
+                ) {
+
+                    const guildConfig =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    if (
+                        !guildConfig.submitStaffRoleId
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "The server submission system has not been configured yet.",
+                            ephemeral: true
+                        });
+                    }
+
+                    const modal =
+                        new ModalBuilder()
+                            .setCustomId(
+                                "server_submission_modal"
+                            )
+                            .setTitle(
+                                "Submit Your Server"
+                            );
+
+                    const name =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_name"
+                            )
+                            .setLabel(
+                                "Server Name"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setMaxLength(100)
+                            .setRequired(true)
+                            .setPlaceholder(
+                                "Example: Wyndmere Academy"
+                            );
+
+                    const description =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_description"
+                            )
+                            .setLabel(
+                                "Server Description"
+                            )
+                            .setStyle(
+                                TextInputStyle.Paragraph
+                            )
+                            .setMaxLength(1000)
+                            .setRequired(true);
+
+                    const invite =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_invite"
+                            )
+                            .setLabel(
+                                "Discord Invite"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setMaxLength(200)
+                            .setRequired(true)
+                            .setPlaceholder(
+                                "https://discord.gg/example"
+                            );
+
+                    const category =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_category"
+                            )
+                            .setLabel(
+                                "Server Category"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setMaxLength(100)
+                            .setRequired(true)
+                            .setPlaceholder(
+                                "Gaming, Community, Roblox..."
+                            );
+
+                    const owner =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_owner"
+                            )
+                            .setLabel(
+                                "Your Role"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setMaxLength(100)
+                            .setRequired(true)
+                            .setPlaceholder(
+                                "Owner, Founder, Administrator..."
+                            );
+
+                    modal.addComponents(
+                        new ActionRowBuilder()
+                            .addComponents(name),
+                        new ActionRowBuilder()
+                            .addComponents(description),
+                        new ActionRowBuilder()
+                            .addComponents(invite),
+                        new ActionRowBuilder()
+                            .addComponents(category),
+                        new ActionRowBuilder()
+                            .addComponents(owner)
+                    );
+
+                    return interaction.showModal(
+                        modal
+                    );
+                }
+
+                // ==================================================
+                // ACCEPT SUBMISSION
                 // ==================================================
 
                 if (
                     interaction.customId.startsWith(
-                        "enrolcfg_"
+                        "submission_accept_"
                     )
                 ) {
 
                     if (
-                        !canManage(
+                        !isStaff(
                             interaction.member
                         )
                     ) {
-
                         return interaction.reply({
                             content:
-                                "You need Manage Server permissions.",
+                                "Only staff can approve submissions.",
                             ephemeral: true
                         });
-
                     }
 
-                    // ------------------------------
-                    // REFRESH
-                    // ------------------------------
+                    await interaction.deferReply({
+                        ephemeral: true
+                    });
 
-                    if (
-                        interaction.customId ===
-                        "enrolcfg_refresh"
-                    ) {
+                    const submissionId =
+                        interaction.customId.replace(
+                            "submission_accept_",
+                            ""
+                        );
 
-                        return interaction.update({
-                            embeds: [
-                                buildEnrolConfigEmbed(
-                                    interaction.guild
-                                )
-                            ],
-                            components:
-                                enrolConfigComponents()
-                        });
+                    const submission =
+                        submissions.get(
+                            submissionId
+                        );
 
+                    if (!submission) {
+                        return interaction.editReply(
+                            "This submission is no longer available."
+                        );
                     }
 
-                    // ------------------------------
-                    // STAFF ROLE
-                    // ------------------------------
+                    const guildConfig =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    const listingChannel =
+                        interaction.guild.channels.cache.get(
+                            guildConfig.verifiedChannelId
+                        );
+
+                    if (!listingChannel) {
+                        return interaction.editReply(
+                            "The verified server channel has not been configured."
+                        );
+                    }
+
+                    // ----------------------------------------------
+                    // VERIFIED ROLE
+                    // ----------------------------------------------
 
                     if (
-                        interaction.customId ===
-                        "enrolcfg_staff"
+                        guildConfig.verifiedRoleId
                     ) {
 
-                        const roles =
-                            interaction.guild.roles.cache
-                                .filter(
-                                    role =>
-                                        role.id !==
-                                        interaction.guild.id
+                        const applicant =
+                            await interaction.guild.members
+                                .fetch(
+                                    submission.userId
                                 )
-                                .sort(
-                                    (a, b) =>
-                                        b.position -
-                                        a.position
+                                .catch(() => null);
+
+                        const verifiedRole =
+                            interaction.guild.roles.cache.get(
+                                guildConfig.verifiedRoleId
+                            );
+
+                        if (
+                            applicant &&
+                            verifiedRole
+                        ) {
+                            await applicant.roles
+                                .add(
+                                    verifiedRole
                                 )
-                                .first(
-                                    25
-                                );
-
-                        if (!roles.length) {
-
-                            return interaction.reply({
-                                content:
-                                    "No roles are available.",
-                                ephemeral: true
-                            });
-
+                                .catch(() => {});
                         }
+                    }
 
-                        const menu =
-                            new StringSelectMenuBuilder()
-                                .setCustomId(
-                                    "enrolcfg_select_staff"
-                                )
-                                .setPlaceholder(
-                                    "Select the RSA staff role"
-                                )
-                                .addOptions(
-                                    roles.map(
-                                        role => ({
-                                            label:
-                                                role.name.substring(
-                                                    0,
-                                                    100
-                                                ),
-                                            value:
-                                                role.id
-                                        })
+                    // ----------------------------------------------
+                    // WEBHOOK
+                    // ----------------------------------------------
+
+                    const webhooks =
+                        await listingChannel
+                            .fetchWebhooks();
+
+                    let webhook =
+                        webhooks.find(
+                            hook =>
+                                hook.owner?.id ===
+                                client.user.id
+                        );
+
+                    if (!webhook) {
+                        webhook =
+                            await listingChannel
+                                .createWebhook({
+                                    name:
+                                        "Verified Servers"
+                                });
+                    }
+
+                    const listing =
+                        new EmbedBuilder()
+                            .setColor(
+                                BRAND_COLOUR
+                            )
+                            .setTitle(
+                                `${LOGO} ${submission.serverName}`
+                            )
+                            .setDescription(
+                                submission.description
+                            )
+                            .addFields(
+                                {
+                                    name:
+                                        "Category",
+                                    value:
+                                        submission.category,
+                                    inline: true
+                                },
+                                {
+                                    name:
+                                        "Server Owner",
+                                    value:
+                                        `<@${submission.userId}>`,
+                                    inline: true
+                                },
+                                {
+                                    name:
+                                        "Join Server",
+                                    value:
+                                        `[Click here to join](${submission.invite})`,
+                                    inline: false
+                                }
+                            )
+                            .setFooter({
+                                text:
+                                    "Verified Server"
+                            })
+                            .setTimestamp();
+
+                    await webhook.send({
+                        username:
+                            submission.serverName,
+                        avatarURL:
+                            client.user
+                                .displayAvatarURL(),
+                        embeds: [
+                            listing
+                        ]
+                    });
+
+                    // ----------------------------------------------
+                    // DM APPLICANT
+                    // ----------------------------------------------
+
+                    const applicant =
+                        await client.users
+                            .fetch(
+                                submission.userId
+                            )
+                            .catch(() => null);
+
+                    if (applicant) {
+                        await applicant
+                            .send({
+                                embeds: [
+                                    createEmbed(
+                                        "Server Approved",
+                                        `Your server **${submission.serverName}** has been approved and has been added to the verified server listings.`
                                     )
-                                );
+                                ]
+                            })
+                            .catch(() => {});
+                    }
 
-                        return interaction.reply({
-                            content:
-                                "Select the role that should be allowed to review school enrolments.",
+                    submissions.delete(
+                        submissionId
+                    );
+
+                    await interaction.message
+                        .edit({
                             components: [
                                 new ActionRowBuilder()
                                     .addComponents(
-                                        menu
+                                        new ButtonBuilder()
+                                            .setCustomId(
+                                                "submission_approved"
+                                            )
+                                            .setLabel(
+                                                "Approved"
+                                            )
+                                            .setStyle(
+                                                ButtonStyle.Success
+                                            )
+                                            .setDisabled(
+                                                true
+                                            )
                                     )
-                            ],
-                            ephemeral: true
+                            ]
                         });
 
-                    }
+                    return interaction.editReply(
+                        "The server has been approved and listed."
+                    );
+                }
 
-                    // ------------------------------
-                    // APPROVED ROLE
-                    // ------------------------------
+                // ==================================================
+                // DENY SUBMISSION
+                // ==================================================
+
+                if (
+                    interaction.customId.startsWith(
+                        "submission_deny_"
+                    )
+                ) {
 
                     if (
-                        interaction.customId ===
-                        "enrolcfg_approved"
+                        !isStaff(
+                            interaction.member
+                        )
                     ) {
-
-                        const roles =
-                            interaction.guild.roles.cache
-                                .filter(
-                                    role =>
-                                        role.id !==
-                                        interaction.guild.id
-                                )
-                                .sort(
-                                    (a, b) =>
-                                        b.position -
-                                        a.position
-                                )
-                                .first(
-                                    25
-                                );
-
-                        const menu =
-                            new StringSelectMenuBuilder()
-                                .setCustomId(
-                                    "enrolcfg_select_approved"
-                                )
-                                .setPlaceholder(
-                                    "Select approved school role"
-                                )
-                                .addOptions(
-                                    roles.map(
-                                        role => ({
-                                            label:
-                                                role.name.substring(
-                                                    0,
-                                                    100
-                                                ),
-                                            value:
-                                                role.id
-                                        })
-                                    )
-                                );
-
                         return interaction.reply({
                             content:
-                                "Select the role that should be given to an approved school.",
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-                                        menu
-                                    )
-                            ],
+                                "Only staff can deny submissions.",
                             ephemeral: true
                         });
-
                     }
 
-                    // ------------------------------
-                    // ENROLMENT CHANNEL
-                    // ------------------------------
+                    const submissionId =
+                        interaction.customId.replace(
+                            "submission_deny_",
+                            ""
+                        );
 
-                    if (
-                        interaction.customId ===
-                        "enrolcfg_channel"
-                    ) {
+                    const submission =
+                        submissions.get(
+                            submissionId
+                        );
 
-                        const channels =
-                            interaction.guild.channels.cache
-                                .filter(
-                                    channel =>
-                                        channel.type ===
-                                        ChannelType.GuildText
-                                )
-                                .first(
-                                    25
-                                );
-
-                        const menu =
-                            new StringSelectMenuBuilder()
-                                .setCustomId(
-                                    "enrolcfg_select_channel"
-                                )
-                                .setPlaceholder(
-                                    "Select the enrolment channel"
-                                )
-                                .addOptions(
-                                    channels.map(
-                                        channel => ({
-                                            label:
-                                                channel.name.substring(
-                                                    0,
-                                                    100
-                                                ),
-                                            value:
-                                                channel.id
-                                        })
-                                    )
-                                );
-
+                    if (!submission) {
                         return interaction.reply({
                             content:
-                                "Select where clean approved-school announcements should be posted.",
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-                                        menu
-                                    )
-                            ],
+                                "This submission is no longer available.",
                             ephemeral: true
                         });
-
                     }
 
-                    // ------------------------------
-                    // REVIEW CATEGORY
-                    // ------------------------------
+                    const modal =
+                        new ModalBuilder()
+                            .setCustomId(
+                                `submission_deny_modal_${submissionId}`
+                            )
+                            .setTitle(
+                                "Deny Submission"
+                            );
 
-                    if (
-                        interaction.customId ===
-                        "enrolcfg_category"
-                    ) {
+                    const reason =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "deny_reason"
+                            )
+                            .setLabel(
+                                "Reason for denial"
+                            )
+                            .setStyle(
+                                TextInputStyle.Paragraph
+                            )
+                            .setRequired(true)
+                            .setMaxLength(1000);
 
-                        const categories =
-                            interaction.guild.channels.cache
-                                .filter(
-                                    channel =>
-                                        channel.type ===
-                                        ChannelType.GuildCategory
-                                )
-                                .first(
-                                    25
-                                );
+                    modal.addComponents(
+                        new ActionRowBuilder()
+                            .addComponents(reason)
+                    );
 
-                        if (!categories.length) {
-
-                            return interaction.reply({
-                                content:
-                                    "There are no categories available.",
-                                ephemeral: true
-                            });
-
-                        }
-
-                        const menu =
-                            new StringSelectMenuBuilder()
-                                .setCustomId(
-                                    "enrolcfg_select_category"
-                                )
-                                .setPlaceholder(
-                                    "Select review category"
-                                )
-                                .addOptions(
-                                    categories.map(
-                                        category => ({
-                                            label:
-                                                category.name.substring(
-                                                    0,
-                                                    100
-                                                ),
-                                            value:
-                                                category.id
-                                        })
-                                    )
-                                );
-
-                        return interaction.reply({
-                            content:
-                                "Select the category where automatic staff-only review channels should be created.",
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-                                        menu
-                                    )
-                            ],
-                            ephemeral: true
-                        });
-
-                    }
-
+                    return interaction.showModal(
+                        modal
+                    );
                 }
 
                 // ==================================================
@@ -3631,8 +1988,12 @@ client.on(
                 // ==================================================
 
                 if (
-                    interaction.customId.startsWith(
-                        "ticketcfg_"
+                    [
+                        "ticket_set_staff",
+                        "ticket_set_category",
+                        "ticket_send_panel"
+                    ].includes(
+                        interaction.customId
                     )
                 ) {
 
@@ -3641,43 +2002,16 @@ client.on(
                             interaction.member
                         )
                     ) {
-
                         return interaction.reply({
                             content:
                                 "You need Manage Server permissions.",
                             ephemeral: true
                         });
-
                     }
-
-                    // ------------------------------
-                    // SEND PANEL
-                    // ------------------------------
 
                     if (
                         interaction.customId ===
-                        "ticketcfg_send"
-                    ) {
-
-                        await interaction.channel.send(
-                            ticketPanel()
-                        );
-
-                        return interaction.reply({
-                            content:
-                                "The ticket panel has been sent.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    // ------------------------------
-                    // STAFF ROLE
-                    // ------------------------------
-
-                    if (
-                        interaction.customId ===
-                        "ticketcfg_staff"
+                        "ticket_set_staff"
                     ) {
 
                         const roles =
@@ -3687,19 +2021,12 @@ client.on(
                                         role.id !==
                                         interaction.guild.id
                                 )
-                                .sort(
-                                    (a, b) =>
-                                        b.position -
-                                        a.position
-                                )
-                                .first(
-                                    25
-                                );
+                                .first(25);
 
                         const menu =
                             new StringSelectMenuBuilder()
                                 .setCustomId(
-                                    "ticketcfg_select_staff"
+                                    "ticket_staff_select"
                                 )
                                 .setPlaceholder(
                                     "Select ticket staff role"
@@ -3729,16 +2056,11 @@ client.on(
                             ],
                             ephemeral: true
                         });
-
                     }
-
-                    // ------------------------------
-                    // CATEGORY
-                    // ------------------------------
 
                     if (
                         interaction.customId ===
-                        "ticketcfg_category"
+                        "ticket_set_category"
                     ) {
 
                         const categories =
@@ -3748,14 +2070,20 @@ client.on(
                                         channel.type ===
                                         ChannelType.GuildCategory
                                 )
-                                .first(
-                                    25
-                                );
+                                .first(25);
+
+                        if (!categories.size) {
+                            return interaction.reply({
+                                content:
+                                    "There are no categories available.",
+                                ephemeral: true
+                            });
+                        }
 
                         const menu =
                             new StringSelectMenuBuilder()
                                 .setCustomId(
-                                    "ticketcfg_select_category"
+                                    "ticket_category_select"
                                 )
                                 .setPlaceholder(
                                     "Select ticket category"
@@ -3785,11 +2113,351 @@ client.on(
                             ],
                             ephemeral: true
                         });
-
                     }
 
+                    if (
+                        interaction.customId ===
+                        "ticket_send_panel"
+                    ) {
+
+                        const embed =
+                            createEmbed(
+                                "Support Tickets",
+                                "Need help? Open a ticket below and a member of staff will assist you."
+                            );
+
+                        const row =
+                            new ActionRowBuilder()
+                                .addComponents(
+                                    new ButtonBuilder()
+                                        .setCustomId(
+                                            "open_ticket"
+                                        )
+                                        .setLabel(
+                                            "Open Ticket"
+                                        )
+                                        .setStyle(
+                                            ButtonStyle.Primary
+                                        )
+                                );
+
+                        await interaction.channel.send({
+                            embeds: [embed],
+                            components: [row]
+                        });
+
+                        return interaction.reply({
+                            content:
+                                "Ticket panel sent.",
+                            ephemeral: true
+                        });
+                    }
                 }
 
+                // ==================================================
+                // SUBMIT CONFIG BUTTONS
+                // ==================================================
+
+                if (
+                    [
+                        "submit_set_staff",
+                        "submit_set_review",
+                        "submit_set_verified",
+                        "submit_set_verified_role",
+                        "submit_send_panel"
+                    ].includes(
+                        interaction.customId
+                    )
+                ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "You need Manage Server permissions.",
+                            ephemeral: true
+                        });
+                    }
+
+                    // STAFF ROLE
+
+                    if (
+                        interaction.customId ===
+                        "submit_set_staff"
+                    ) {
+
+                        const roles =
+                            interaction.guild.roles.cache
+                                .filter(
+                                    role =>
+                                        role.id !==
+                                        interaction.guild.id
+                                )
+                                .first(25);
+
+                        const menu =
+                            new StringSelectMenuBuilder()
+                                .setCustomId(
+                                    "submit_staff_select"
+                                )
+                                .setPlaceholder(
+                                    "Select submission staff role"
+                                )
+                                .addOptions(
+                                    roles.map(
+                                        role => ({
+                                            label:
+                                                role.name.substring(
+                                                    0,
+                                                    100
+                                                ),
+                                            value:
+                                                role.id
+                                        })
+                                    )
+                                );
+
+                        return interaction.reply({
+                            content:
+                                "Select the role that should review submissions.",
+                            components: [
+                                new ActionRowBuilder()
+                                    .addComponents(
+                                        menu
+                                    )
+                            ],
+                            ephemeral: true
+                        });
+                    }
+
+                    // REVIEW CATEGORY
+
+                    if (
+                        interaction.customId ===
+                        "submit_set_review"
+                    ) {
+
+                        const categories =
+                            interaction.guild.channels.cache
+                                .filter(
+                                    channel =>
+                                        channel.type ===
+                                        ChannelType.GuildCategory
+                                )
+                                .first(25);
+
+                        const menu =
+                            new StringSelectMenuBuilder()
+                                .setCustomId(
+                                    "submit_review_select"
+                                )
+                                .setPlaceholder(
+                                    "Select review category"
+                                )
+                                .addOptions(
+                                    categories.map(
+                                        category => ({
+                                            label:
+                                                category.name.substring(
+                                                    0,
+                                                    100
+                                                ),
+                                            value:
+                                                category.id
+                                        })
+                                    )
+                                );
+
+                        return interaction.reply({
+                            content:
+                                "Select the category where private review channels should be created.",
+                            components: [
+                                new ActionRowBuilder()
+                                    .addComponents(
+                                        menu
+                                    )
+                            ],
+                            ephemeral: true
+                        });
+                    }
+
+                    // VERIFIED CHANNEL
+
+                    if (
+                        interaction.customId ===
+                        "submit_set_verified"
+                    ) {
+
+                        const channels =
+                            interaction.guild.channels.cache
+                                .filter(
+                                    channel =>
+                                        channel.type ===
+                                        ChannelType.GuildText
+                                )
+                                .first(25);
+
+                        const menu =
+                            new StringSelectMenuBuilder()
+                                .setCustomId(
+                                    "submit_verified_select"
+                                )
+                                .setPlaceholder(
+                                    "Select verified server channel"
+                                )
+                                .addOptions(
+                                    channels.map(
+                                        channel => ({
+                                            label:
+                                                channel.name.substring(
+                                                    0,
+                                                    100
+                                                ),
+                                            value:
+                                                channel.id
+                                        })
+                                    )
+                                );
+
+                        return interaction.reply({
+                            content:
+                                "Select where approved servers should be listed.",
+                            components: [
+                                new ActionRowBuilder()
+                                    .addComponents(
+                                        menu
+                                    )
+                            ],
+                            ephemeral: true
+                        });
+                    }
+
+                    // VERIFIED ROLE
+
+                    if (
+                        interaction.customId ===
+                        "submit_set_verified_role"
+                    ) {
+
+                        const roles =
+                            interaction.guild.roles.cache
+                                .filter(
+                                    role =>
+                                        role.id !==
+                                        interaction.guild.id
+                                )
+                                .first(25);
+
+                        const menu =
+                            new StringSelectMenuBuilder()
+                                .setCustomId(
+                                    "submit_verified_role_select"
+                                )
+                                .setPlaceholder(
+                                    "Select verified role"
+                                )
+                                .addOptions(
+                                    roles.map(
+                                        role => ({
+                                            label:
+                                                role.name.substring(
+                                                    0,
+                                                    100
+                                                ),
+                                            value:
+                                                role.id
+                                        })
+                                    )
+                                );
+
+                        return interaction.reply({
+                            content:
+                                "Select the role given to approved server owners.",
+                            components: [
+                                new ActionRowBuilder()
+                                    .addComponents(
+                                        menu
+                                    )
+                            ],
+                            ephemeral: true
+                        });
+                    }
+
+                    // SEND SUBMISSION PANEL
+
+                    if (
+                        interaction.customId ===
+                        "submit_send_panel"
+                    ) {
+
+                        const embed =
+                            createEmbed(
+                                "Submit Your Server",
+                                "Want your server featured in our verified server listings?\n\n" +
+                                "Click the button below to submit your server for review.\n\n" +
+                                "All submissions are manually reviewed by our staff team."
+                            );
+
+                        const row =
+                            new ActionRowBuilder()
+                                .addComponents(
+                                    new ButtonBuilder()
+                                        .setCustomId(
+                                            "submit_server"
+                                        )
+                                        .setLabel(
+                                            "Submit Server"
+                                        )
+                                        .setStyle(
+                                            ButtonStyle.Primary
+                                        )
+                                );
+
+                        await interaction.channel.send({
+                            embeds: [embed],
+                            components: [row]
+                        });
+
+                        return interaction.reply({
+                            content:
+                                "Submission panel sent.",
+                            ephemeral: true
+                        });
+                    }
+                }
+
+                // ==================================================
+                // REFRESH CONFIG PANELS
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "ticket_refresh"
+                ) {
+
+                    await interaction.deferUpdate();
+
+                    return sendTicketConfigPanel(
+                        interaction,
+                        true
+                    );
+                }
+
+                if (
+                    interaction.customId ===
+                    "submit_refresh"
+                ) {
+
+                    await interaction.deferUpdate();
+
+                    return sendSubmitConfigPanel(
+                        interaction,
+                        true
+                    );
+                }
             }
 
             // ====================================================
@@ -3801,274 +2469,32 @@ client.on(
             ) {
 
                 // ==================================================
-                // EDIT QUESTION
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrol_edit_question"
-                ) {
-
-                    const session =
-                        enrolments.get(
-                            interaction.user.id
-                        );
-
-                    if (!session) {
-
-                        return interaction.reply({
-                            content:
-                                "Your questionnaire has expired.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const questionId =
-                        interaction.values[0];
-
-                    const question =
-                        enrolQuestions.find(
-                            item =>
-                                item.id ===
-                                questionId
-                        );
-
-                    if (!question) {
-
-                        return interaction.reply({
-                            content:
-                                "That question could not be found.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    return interaction.showModal(
-                        createEditModal(
-                            question,
-                            session.answers[
-                                question.id
-                            ]
-                        )
-                    );
-
-                }
-
-                // ==================================================
-                // ENROL STAFF ROLE
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrolcfg_select_staff"
-                ) {
-
-                    if (
-                        !canManage(
-                            interaction.member
-                        )
-                    ) return;
-
-                    if (
-                        !config[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        config[
-                            interaction.guild.id
-                        ] = {};
-                    }
-
-                    config[
-                        interaction.guild.id
-                    ].enrolStaffRoleId =
-                        interaction.values[0];
-
-                    saveJSON(
-                        configFile,
-                        config
-                    );
-
-                    const role =
-                        interaction.guild.roles.cache.get(
-                            interaction.values[0]
-                        );
-
-                    return interaction.update({
-                        content:
-                            `RSA enrolment staff role set to ${role}.`,
-                        components: []
-                    });
-
-                }
-
-                // ==================================================
-                // ENROL APPROVED ROLE
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrolcfg_select_approved"
-                ) {
-
-                    if (
-                        !config[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        config[
-                            interaction.guild.id
-                        ] = {};
-                    }
-
-                    config[
-                        interaction.guild.id
-                    ].enrolApprovedRoleId =
-                        interaction.values[0];
-
-                    saveJSON(
-                        configFile,
-                        config
-                    );
-
-                    const role =
-                        interaction.guild.roles.cache.get(
-                            interaction.values[0]
-                        );
-
-                    return interaction.update({
-                        content:
-                            `Approved school role set to ${role}.`,
-                        components: []
-                    });
-
-                }
-
-                // ==================================================
-                // ENROL CHANNEL
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrolcfg_select_channel"
-                ) {
-
-                    if (
-                        !config[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        config[
-                            interaction.guild.id
-                        ] = {};
-                    }
-
-                    config[
-                        interaction.guild.id
-                    ].enrolChannelId =
-                        interaction.values[0];
-
-                    saveJSON(
-                        configFile,
-                        config
-                    );
-
-                    const channel =
-                        interaction.guild.channels.cache.get(
-                            interaction.values[0]
-                        );
-
-                    return interaction.update({
-                        content:
-                            `Approved-school announcements will now be sent to ${channel}.`,
-                        components: []
-                    });
-
-                }
-
-                // ==================================================
-                // ENROL REVIEW CATEGORY
-                // ==================================================
-
-                if (
-                    interaction.customId ===
-                    "enrolcfg_select_category"
-                ) {
-
-                    if (
-                        !config[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        config[
-                            interaction.guild.id
-                        ] = {};
-                    }
-
-                    config[
-                        interaction.guild.id
-                    ].enrolReviewCategoryId =
-                        interaction.values[0];
-
-                    saveJSON(
-                        configFile,
-                        config
-                    );
-
-                    const category =
-                        interaction.guild.channels.cache.get(
-                            interaction.values[0]
-                        );
-
-                    return interaction.update({
-                        content:
-                            `Enrolment review category set to **${category?.name || "Unknown"}**.`,
-                        components: []
-                    });
-
-                }
-
-                // ==================================================
                 // TICKET STAFF
                 // ==================================================
 
                 if (
                     interaction.customId ===
-                    "ticketcfg_select_staff"
+                    "ticket_staff_select"
                 ) {
 
-                    if (
-                        !config[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        config[
-                            interaction.guild.id
-                        ] = {};
-                    }
-
-                    config[
-                        interaction.guild.id
-                    ].ticketStaffRoleId =
+                    const roleId =
                         interaction.values[0];
+
+                    getGuildConfig(
+                        interaction.guild.id
+                    ).ticketStaffRoleId =
+                        roleId;
 
                     saveJSON(
                         configFile,
                         config
                     );
 
-                    const role =
-                        interaction.guild.roles.cache.get(
-                            interaction.values[0]
-                        );
-
                     return interaction.update({
                         content:
-                            `Ticket staff role set to ${role}.`,
+                            `Ticket staff role set to <@&${roleId}>.`,
                         components: []
                     });
-
                 }
 
                 // ==================================================
@@ -4077,42 +2503,156 @@ client.on(
 
                 if (
                     interaction.customId ===
-                    "ticketcfg_select_category"
+                    "ticket_category_select"
                 ) {
 
-                    if (
-                        !config[
-                            interaction.guild.id
-                        ]
-                    ) {
-                        config[
-                            interaction.guild.id
-                        ] = {};
-                    }
-
-                    config[
-                        interaction.guild.id
-                    ].ticketCategoryId =
+                    const categoryId =
                         interaction.values[0];
+
+                    getGuildConfig(
+                        interaction.guild.id
+                    ).ticketCategoryId =
+                        categoryId;
 
                     saveJSON(
                         configFile,
                         config
                     );
 
-                    const category =
-                        interaction.guild.channels.cache.get(
-                            interaction.values[0]
-                        );
+                    return interaction.update({
+                        content:
+                            `Ticket category set to <#${categoryId}>.`,
+                        components: []
+                    });
+                }
+
+                // ==================================================
+                // SUBMISSION STAFF
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "submit_staff_select"
+                ) {
+
+                    const roleId =
+                        interaction.values[0];
+
+                    getGuildConfig(
+                        interaction.guild.id
+                    ).submitStaffRoleId =
+                        roleId;
+
+                    // Also use this as general staff role
+                    if (
+                        !getGuildConfig(
+                            interaction.guild.id
+                        ).staffRoleId
+                    ) {
+                        getGuildConfig(
+                            interaction.guild.id
+                        ).staffRoleId =
+                            roleId;
+                    }
+
+                    saveJSON(
+                        configFile,
+                        config
+                    );
 
                     return interaction.update({
                         content:
-                            `Ticket category set to **${category?.name || "Unknown"}**.`,
+                            `Submission staff role set to <@&${roleId}>.`,
                         components: []
                     });
-
                 }
 
+                // ==================================================
+                // REVIEW CATEGORY
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "submit_review_select"
+                ) {
+
+                    const categoryId =
+                        interaction.values[0];
+
+                    getGuildConfig(
+                        interaction.guild.id
+                    ).submitReviewCategoryId =
+                        categoryId;
+
+                    saveJSON(
+                        configFile,
+                        config
+                    );
+
+                    return interaction.update({
+                        content:
+                            `Submission review category set to <#${categoryId}>.`,
+                        components: []
+                    });
+                }
+
+                // ==================================================
+                // VERIFIED CHANNEL
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "submit_verified_select"
+                ) {
+
+                    const channelId =
+                        interaction.values[0];
+
+                    getGuildConfig(
+                        interaction.guild.id
+                    ).verifiedChannelId =
+                        channelId;
+
+                    saveJSON(
+                        configFile,
+                        config
+                    );
+
+                    return interaction.update({
+                        content:
+                            `Verified server channel set to <#${channelId}>.`,
+                        components: []
+                    });
+                }
+
+                // ==================================================
+                // VERIFIED ROLE
+                // ==================================================
+
+                if (
+                    interaction.customId ===
+                    "submit_verified_role_select"
+                ) {
+
+                    const roleId =
+                        interaction.values[0];
+
+                    getGuildConfig(
+                        interaction.guild.id
+                    ).verifiedRoleId =
+                        roleId;
+
+                    saveJSON(
+                        configFile,
+                        config
+                    );
+
+                    return interaction.update({
+                        content:
+                            `Verified role set to <@&${roleId}>.`,
+                        components: []
+                    });
+                }
             }
 
             // ====================================================
@@ -4124,97 +2664,240 @@ client.on(
             ) {
 
                 // ==================================================
-                // EDIT QUESTION
+                // SERVER SUBMISSION
                 // ==================================================
 
                 if (
-                    interaction.customId.startsWith(
-                        "enrol_edit_modal_"
-                    )
+                    interaction.customId ===
+                    "server_submission_modal"
                 ) {
 
-                    const questionId =
-                        interaction.customId.replace(
-                            "enrol_edit_modal_",
-                            ""
-                        );
-
-                    const session =
-                        enrolments.get(
-                            interaction.user.id
-                        );
-
-                    if (!session) {
-
-                        return interaction.reply({
-                            content:
-                                "Your questionnaire has expired.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const question =
-                        enrolQuestions.find(
-                            item =>
-                                item.id ===
-                                questionId
-                        );
-
-                    if (!question) {
-
-                        return interaction.reply({
-                            content:
-                                "Question not found.",
-                            ephemeral: true
-                        });
-
-                    }
-
-                    const answer =
+                    const serverName =
                         interaction.fields.getTextInputValue(
-                            "answer"
+                            "server_name"
                         );
 
-                    session.answers[
-                        questionId
-                    ] = answer;
+                    const description =
+                        interaction.fields.getTextInputValue(
+                            "server_description"
+                        );
+
+                    const invite =
+                        interaction.fields.getTextInputValue(
+                            "server_invite"
+                        );
+
+                    const category =
+                        interaction.fields.getTextInputValue(
+                            "server_category"
+                        );
+
+                    const owner =
+                        interaction.fields.getTextInputValue(
+                            "server_owner"
+                        );
+
+                    const submissionId =
+                        `${interaction.user.id}-${Date.now()}`;
+
+                    submissions.set(
+                        submissionId,
+                        {
+                            userId:
+                                interaction.user.id,
+                            serverName,
+                            description,
+                            invite,
+                            category,
+                            owner
+                        }
+                    );
+
+                    const guildConfig =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    const staffRole =
+                        interaction.guild.roles.cache.get(
+                            guildConfig.submitStaffRoleId
+                        );
+
+                    const reviewCategory =
+                        interaction.guild.channels.cache.get(
+                            guildConfig.submitReviewCategoryId
+                        );
+
+                    if (!staffRole) {
+                        return interaction.reply({
+                            content:
+                                "The submission staff role is not configured correctly.",
+                            ephemeral: true
+                        });
+                    }
+
+                    // ----------------------------------------------
+                    // REVIEW CHANNEL
+                    // ----------------------------------------------
+
+                    const safeName =
+                        serverName
+                            .toLowerCase()
+                            .replace(
+                                /[^a-z0-9]+/g,
+                                "-"
+                            )
+                            .replace(
+                                /^-|-$/g,
+                                ""
+                            )
+                            .substring(
+                                0,
+                                60
+                            );
+
+                    const reviewChannel =
+                        await interaction.guild.channels.create({
+                            name:
+                                `review-${safeName}`,
+                            type:
+                                ChannelType.GuildText,
+                            parent:
+                                reviewCategory ||
+                                undefined,
+                            permissionOverwrites: [
+                                {
+                                    id:
+                                        interaction.guild
+                                            .roles
+                                            .everyone
+                                            .id,
+                                    deny: [
+                                        PermissionFlagsBits.ViewChannel
+                                    ]
+                                },
+                                {
+                                    id:
+                                        staffRole.id,
+                                    allow: [
+                                        PermissionFlagsBits.ViewChannel,
+                                        PermissionFlagsBits.SendMessages,
+                                        PermissionFlagsBits.ReadMessageHistory
+                                    ]
+                                },
+                                {
+                                    id:
+                                        client.user.id,
+                                    allow: [
+                                        PermissionFlagsBits.ViewChannel,
+                                        PermissionFlagsBits.SendMessages,
+                                        PermissionFlagsBits.ReadMessageHistory,
+                                        PermissionFlagsBits.ManageChannels
+                                    ]
+                                }
+                            ]
+                        });
+
+                    // ----------------------------------------------
+                    // REVIEW EMBED
+                    // ----------------------------------------------
+
+                    const reviewEmbed =
+                        createEmbed(
+                            "New Server Submission",
+                            `A new server has been submitted for manual verification.\n\n` +
+                            `**Submitted by:** <@${interaction.user.id}>`
+                        )
+                            .addFields(
+                                {
+                                    name:
+                                        "Server Name",
+                                    value:
+                                        serverName
+                                },
+                                {
+                                    name:
+                                        "Description",
+                                    value:
+                                        description
+                                },
+                                {
+                                    name:
+                                        "Invite",
+                                    value:
+                                        invite
+                                },
+                                {
+                                    name:
+                                        "Category",
+                                    value:
+                                        category
+                                },
+                                {
+                                    name:
+                                        "Submitter's Role",
+                                    value:
+                                        owner
+                                }
+                            );
+
+                    const buttons =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        `submission_accept_${submissionId}`
+                                    )
+                                    .setLabel(
+                                        "Accept"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Success
+                                    ),
+
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        `submission_deny_${submissionId}`
+                                    )
+                                    .setLabel(
+                                        "Deny"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Danger
+                                    )
+                            );
+
+                    await reviewChannel.send({
+                        content:
+                            `${staffRole} — new submission awaiting review.`,
+                        embeds: [
+                            reviewEmbed
+                        ],
+                        components: [
+                            buttons
+                        ]
+                    });
 
                     return interaction.reply({
                         embeds: [
                             createEmbed(
-                                "Answer Updated",
-                                "Your answer has been updated."
+                                "Submission Received",
+                                "Your server has been submitted successfully.\n\n" +
+                                "Our staff team will manually review it. " +
+                                "You will receive a DM once a decision has been made."
                             )
                         ],
-                        components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "enrol_review_again"
-                                        )
-                                        .setLabel(
-                                            "Review Enrolment"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Primary
-                                        )
-
-                                )
-                        ]
+                        ephemeral: true
                     });
-
                 }
 
                 // ==================================================
-                // DENIAL
+                // DENY MODAL
                 // ==================================================
 
                 if (
                     interaction.customId.startsWith(
-                        "enrol_deny_modal_"
+                        "submission_deny_modal_"
                     )
                 ) {
 
@@ -4223,91 +2906,80 @@ client.on(
                             interaction.member
                         )
                     ) {
-
                         return interaction.reply({
                             content:
-                                "You do not have permission to do this.",
+                                "Only staff can do this.",
                             ephemeral: true
                         });
-
                     }
 
-                    const applicantId =
+                    const submissionId =
                         interaction.customId.replace(
-                            "enrol_deny_modal_",
+                            "submission_deny_modal_",
                             ""
                         );
 
+                    const submission =
+                        submissions.get(
+                            submissionId
+                        );
+
+                    if (!submission) {
+                        return interaction.reply({
+                            content:
+                                "This submission no longer exists.",
+                            ephemeral: true
+                        });
+                    }
+
                     const reason =
                         interaction.fields.getTextInputValue(
-                            "reason"
+                            "deny_reason"
                         );
 
                     const applicant =
-                        await interaction.guild
-                            .members
+                        await client.users
                             .fetch(
-                                applicantId
+                                submission.userId
                             )
-                            .catch(
-                                () => null
-                            );
+                            .catch(() => null);
 
                     if (applicant) {
-
-                        await applicant.user.send({
-                            embeds: [
-                                createEmbed(
-                                    "School Enrolment Denied",
-                                    `Your school enrolment in **${interaction.guild.name}** has been denied.\n\n**Reason:** ${reason}`
-                                )
-                            ]
-                        }).catch(
-                            () => {}
-                        );
-
+                        await applicant
+                            .send({
+                                embeds: [
+                                    createEmbed(
+                                        "Server Submission Denied",
+                                        `Your server **${submission.serverName}** was not approved for our verified server listings.\n\n` +
+                                        `**Reason:** ${reason}`
+                                    )
+                                ]
+                            })
+                            .catch(() => {});
                     }
+
+                    submissions.delete(
+                        submissionId
+                    );
 
                     await interaction.channel.send({
                         embeds: [
                             createEmbed(
-                                "Enrolment Denied",
-                                `This enrolment has been denied by ${interaction.user}.\n\n**Reason:** ${reason}`
+                                "Submission Denied",
+                                `This submission has been denied by ${interaction.user}.\n\n` +
+                                `**Reason:** ${reason}`
                             )
                         ]
                     });
 
-                    await interaction.message.edit({
-                        components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "enrol_decision_denied"
-                                        )
-                                        .setLabel(
-                                            "Denied"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                        .setDisabled(
-                                            true
-                                        )
-                                )
-                        ]
-                    }).catch(
-                        () => {}
-                    );
-
-                    return interaction.reply({
+                    await interaction.reply({
                         content:
-                            "The enrolment has been denied.",
+                            "The submitter has been notified and the submission has been denied.",
                         ephemeral: true
                     });
 
+                    return;
                 }
-
             }
 
         } catch (error) {
@@ -4323,115 +2995,365 @@ client.on(
                     interaction.replied ||
                     interaction.deferred
                 ) {
-
                     await interaction.followUp({
                         content:
                             "Something went wrong while processing that action.",
                         ephemeral: true
                     });
-
                 } else {
-
                     await interaction.reply({
                         content:
                             "Something went wrong while processing that action.",
                         ephemeral: true
                     });
-
                 }
 
-            } catch (
-                responseError
-            ) {
-
-                console.error(
-                    "Could not respond:",
-                    responseError
-                );
-
-            }
-
+            } catch {}
         }
-
     }
 );
 
 // ============================================================
-// REVIEW AGAIN BUTTON
+// TICKET CONFIG PANEL
 // ============================================================
 
-client.on(
-    "interactionCreate",
-    async interaction => {
+async function sendTicketConfigPanel(
+    interaction,
+    edit = false
+) {
 
-        if (
-            !interaction.isButton()
-        ) return;
+    const guildConfig =
+        getGuildConfig(
+            interaction.guild.id
+        );
 
-        if (
-            interaction.customId !==
-            "enrol_review_again"
-        ) return;
+    const staffRole =
+        guildConfig.ticketStaffRoleId
+            ? interaction.guild.roles.cache.get(
+                  guildConfig.ticketStaffRoleId
+              )
+            : null;
 
-        try {
+    const category =
+        guildConfig.ticketCategoryId
+            ? interaction.guild.channels.cache.get(
+                  guildConfig.ticketCategoryId
+              )
+            : null;
 
-            return interaction.update({
-                embeds: [],
-                components: []
-            }).then(
-                () =>
-                    showEnrolmentReview(
-                        interaction.user
+    const embed =
+        createEmbed(
+            "Ticket Configuration",
+            "Configure your ticket system using the buttons below."
+        )
+            .addFields(
+                {
+                    name:
+                        "Staff Role",
+                    value:
+                        staffRole
+                            ? `${staffRole}`
+                            : "Not configured",
+                    inline: true
+                },
+                {
+                    name:
+                        "Ticket Category",
+                    value:
+                        category
+                            ? `${category}`
+                            : "Not configured",
+                    inline: true
+                },
+                {
+                    name:
+                        "Panel",
+                    value:
+                        "Use **Send Panel** to post the ticket panel in the current channel.",
+                    inline: false
+                }
+            );
+
+    const row =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "ticket_set_staff"
+                    )
+                    .setLabel(
+                        "Staff Role"
+                    )
+                    .setStyle(
+                        ButtonStyle.Primary
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "ticket_set_category"
+                    )
+                    .setLabel(
+                        "Ticket Category"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "ticket_send_panel"
+                    )
+                    .setLabel(
+                        "Send Panel"
+                    )
+                    .setStyle(
+                        ButtonStyle.Success
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "ticket_refresh"
+                    )
+                    .setLabel(
+                        "Refresh"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
                     )
             );
 
-        } catch (error) {
+    if (edit) {
 
-            console.error(
-                "Review again error:",
-                error
+        return interaction.editReply({
+            embeds: [embed],
+            components: [row]
+        });
+    }
+
+    return interaction.reply({
+        embeds: [embed],
+        components: [row],
+        ephemeral: true
+    });
+}
+
+// ============================================================
+// SUBMIT CONFIG PANEL
+// ============================================================
+
+async function sendSubmitConfigPanel(
+    interaction,
+    edit = false
+) {
+
+    const guildConfig =
+        getGuildConfig(
+            interaction.guild.id
+        );
+
+    const staffRole =
+        guildConfig.submitStaffRoleId
+            ? interaction.guild.roles.cache.get(
+                  guildConfig.submitStaffRoleId
+              )
+            : null;
+
+    const reviewCategory =
+        guildConfig.submitReviewCategoryId
+            ? interaction.guild.channels.cache.get(
+                  guildConfig.submitReviewCategoryId
+              )
+            : null;
+
+    const verifiedChannel =
+        guildConfig.verifiedChannelId
+            ? interaction.guild.channels.cache.get(
+                  guildConfig.verifiedChannelId
+              )
+            : null;
+
+    const verifiedRole =
+        guildConfig.verifiedRoleId
+            ? interaction.guild.roles.cache.get(
+                  guildConfig.verifiedRoleId
+              )
+            : null;
+
+    const embed =
+        createEmbed(
+            "Server Submission Configuration",
+            "Configure how server submissions are reviewed and listed."
+        )
+            .addFields(
+                {
+                    name:
+                        "Submission Staff",
+                    value:
+                        staffRole
+                            ? `${staffRole}`
+                            : "Not configured",
+                    inline: true
+                },
+                {
+                    name:
+                        "Review Category",
+                    value:
+                        reviewCategory
+                            ? `${reviewCategory}`
+                            : "Not configured",
+                    inline: true
+                },
+                {
+                    name:
+                        "Verified Channel",
+                    value:
+                        verifiedChannel
+                            ? `${verifiedChannel}`
+                            : "Not configured",
+                    inline: true
+                },
+                {
+                    name:
+                        "Verified Role",
+                    value:
+                        verifiedRole
+                            ? `${verifiedRole}`
+                            : "Not configured",
+                    inline: true
+                },
+                {
+                    name:
+                        "How it works",
+                    value:
+                        "Members use the panel to submit their server. " +
+                        "A private review channel is automatically created for staff. " +
+                        "Staff can accept or deny the submission. " +
+                        "Accepted servers are automatically posted in the configured verified channel using a webhook.",
+                    inline: false
+                }
             );
 
-        }
+    const row1 =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "submit_set_staff"
+                    )
+                    .setLabel(
+                        "Staff Role"
+                    )
+                    .setStyle(
+                        ButtonStyle.Primary
+                    ),
 
-    }
-);
+                new ButtonBuilder()
+                    .setCustomId(
+                        "submit_set_review"
+                    )
+                    .setLabel(
+                        "Review Category"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    ),
 
-// ============================================================
-// CLEAN EXPIRED QUESTIONNAIRES
-// ============================================================
+                new ButtonBuilder()
+                    .setCustomId(
+                        "submit_set_verified"
+                    )
+                    .setLabel(
+                        "Verified Channel"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    )
+            );
 
-setInterval(
-    () => {
+    const row2 =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "submit_set_verified_role"
+                    )
+                    .setLabel(
+                        "Verified Role"
+                    )
+                    .setStyle(
+                        ButtonStyle.Primary
+                    ),
 
-        const now =
-            Date.now();
+                new ButtonBuilder()
+                    .setCustomId(
+                        "submit_send_panel"
+                    )
+                    .setLabel(
+                        "Send Panel"
+                    )
+                    .setStyle(
+                        ButtonStyle.Success
+                    ),
 
-        for (
-            const [
-                userId,
-                session
+                new ButtonBuilder()
+                    .setCustomId(
+                        "submit_refresh"
+                    )
+                    .setLabel(
+                        "Refresh"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    )
+            );
+
+    if (edit) {
+
+        return interaction.editReply({
+            embeds: [embed],
+            components: [
+                row1,
+                row2
             ]
-            of enrolments.entries()
+        });
+    }
+
+    return interaction.reply({
+        embeds: [embed],
+        components: [
+            row1,
+            row2
+        ],
+        ephemeral: true
+    });
+}
+
+// ============================================================
+// CLEAN OLD SUBMISSIONS
+// ============================================================
+
+setInterval(() => {
+
+    const now =
+        Date.now();
+
+    for (
+        const [
+            id,
+            submission
+        ] of submissions.entries()
+    ) {
+
+        if (
+            now -
+                submission.createdAt >
+            24 * 60 * 60 * 1000
         ) {
-
-            if (
-                now -
-                session.createdAt >
-                60 * 60 * 1000
-            ) {
-
-                enrolments.delete(
-                    userId
-                );
-
-            }
-
+            submissions.delete(id);
         }
+    }
 
-    },
-    10 * 60 * 1000
-);
+}, 30 * 60 * 1000);
 
 // ============================================================
 // LOGIN
