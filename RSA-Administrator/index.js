@@ -15,24 +15,46 @@ const {
     ModalBuilder,
     TextInputBuilder,
     TextInputStyle,
-    ChannelType
+    ChannelType,
+    AttachmentBuilder,
+    ActivityType
 } = require("discord.js");
 
 const fs = require("fs");
 const path = require("path");
 
+/* =========================================================
+   RSA UTILITY CONFIG
+========================================================= */
+
 const TOKEN = process.env.DISCORD_TOKEN;
 const CLIENT_ID = process.env.CLIENT_ID;
 const GUILD_ID = process.env.GUILD_ID;
 
-const LOGO = "<:Our_Logo:1557149633623363594>";
-const COLOUR = "#2F4DA8";
-const VERSION = "6.0.0";
+const BOT_NAME = "RSA Utility";
+const BOT_VERSION = "6.0.0";
 
-if (!TOKEN || !CLIENT_ID || !GUILD_ID) {
-    console.error("Missing DISCORD_TOKEN, CLIENT_ID or GUILD_ID.");
+const EMBED_COLOUR = "#2F4DA8";
+const RSA_LOGO = "<:Our_Logo:1557149633623363594>";
+
+if (!TOKEN) {
+    console.error("DISCORD_TOKEN is missing.");
     process.exit(1);
 }
+
+if (!CLIENT_ID) {
+    console.error("CLIENT_ID is missing.");
+    process.exit(1);
+}
+
+if (!GUILD_ID) {
+    console.error("GUILD_ID is missing.");
+    process.exit(1);
+}
+
+/* =========================================================
+   CLIENT
+========================================================= */
 
 const client = new Client({
     intents: [
@@ -49,39 +71,85 @@ const client = new Client({
 });
 
 /* =========================================================
-   DATA
+   DATA STORAGE
 ========================================================= */
 
 const DATA_DIR = path.join(__dirname, "data");
 
 if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(DATA_DIR, {
+        recursive: true
+    });
 }
 
-const CONFIG_FILE = path.join(DATA_DIR, "config.json");
-const WARNINGS_FILE = path.join(DATA_DIR, "warnings.json");
-const ENROL_FILE = path.join(DATA_DIR, "enrolments.json");
+const WARNINGS_FILE = path.join(
+    DATA_DIR,
+    "warnings.json"
+);
 
-function load(file, fallback) {
+const CONFIG_FILE = path.join(
+    DATA_DIR,
+    "config.json"
+);
+
+function loadJSON(file, fallback) {
     try {
         if (!fs.existsSync(file)) {
-            fs.writeFileSync(file, JSON.stringify(fallback, null, 2));
+            fs.writeFileSync(
+                file,
+                JSON.stringify(
+                    fallback,
+                    null,
+                    2
+                )
+            );
+
             return fallback;
         }
 
-        return JSON.parse(fs.readFileSync(file, "utf8"));
-    } catch {
+        return JSON.parse(
+            fs.readFileSync(
+                file,
+                "utf8"
+            )
+        );
+    } catch (error) {
+        console.error(
+            `Failed to load ${file}:`,
+            error
+        );
+
         return fallback;
     }
 }
 
-function save(file, data) {
-    fs.writeFileSync(file, JSON.stringify(data, null, 2));
+function saveJSON(file, data) {
+    try {
+        fs.writeFileSync(
+            file,
+            JSON.stringify(
+                data,
+                null,
+                2
+            )
+        );
+    } catch (error) {
+        console.error(
+            `Failed to save ${file}:`,
+            error
+        );
+    }
 }
 
-const configs = load(CONFIG_FILE, {});
-const warnings = load(WARNINGS_FILE, {});
-const enrolments = load(ENROL_FILE, {});
+const warnings = loadJSON(
+    WARNINGS_FILE,
+    {}
+);
+
+const configs = loadJSON(
+    CONFIG_FILE,
+    {}
+);
 
 const embedSessions = new Map();
 
@@ -89,33 +157,54 @@ const embedSessions = new Map();
    EMBEDS
 ========================================================= */
 
+function brandedTitle(title) {
+    return `${RSA_LOGO} ${title}`;
+}
+
 function createEmbed(options = {}) {
     const embed = new EmbedBuilder()
-        .setColor(COLOUR)
-        .setTimestamp();
+        .setColor(EMBED_COLOUR);
 
     if (options.title) {
-        embed.setTitle(`${LOGO} ${options.title}`);
+        embed.setTitle(
+            brandedTitle(
+                options.title
+            )
+        );
     }
 
     if (options.description) {
-        embed.setDescription(options.description);
+        embed.setDescription(
+            options.description
+        );
     }
 
-    if (options.fields) {
-        embed.addFields(options.fields);
+    if (options.fields?.length) {
+        embed.addFields(
+            options.fields
+        );
     }
 
     if (options.thumbnail) {
-        embed.setThumbnail(options.thumbnail);
+        embed.setThumbnail(
+            options.thumbnail
+        );
     }
 
     if (options.image) {
-        embed.setImage(options.image);
+        embed.setImage(
+            options.image
+        );
     }
 
     if (options.footer) {
-        embed.setFooter({ text: options.footer });
+        embed.setFooter({
+            text: options.footer
+        });
+    }
+
+    if (options.timestamp !== false) {
+        embed.setTimestamp();
     }
 
     return embed;
@@ -126,136 +215,202 @@ function createEmbed(options = {}) {
 ========================================================= */
 
 const commands = [
+
+    /* HELP */
+
     new SlashCommandBuilder()
         .setName("help")
-        .setDescription("View RSA Administrator commands."),
+        .setDescription(
+            "View RSA Utility commands."
+        ),
+
+    /* INFORMATION */
 
     new SlashCommandBuilder()
         .setName("ping")
-        .setDescription("Check the bot latency."),
+        .setDescription(
+            "Check the bot's latency."
+        ),
 
     new SlashCommandBuilder()
         .setName("botinfo")
-        .setDescription("View bot information."),
+        .setDescription(
+            "View information about RSA Utility."
+        ),
 
     new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("View server information."),
+        .setDescription(
+            "View information about this server."
+        ),
 
     new SlashCommandBuilder()
         .setName("userinfo")
-        .setDescription("View information about a member.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member to inspect.")
+        .setDescription(
+            "View information about a member."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to inspect."
+                )
                 .setRequired(false)
         ),
 
-    new SlashCommandBuilder()
-        .setName("profile")
-        .setDescription("View an RSA member profile.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member to view.")
-                .setRequired(false)
-        ),
+    /* MODERATION */
 
     new SlashCommandBuilder()
         .setName("ban")
-        .setDescription("Ban a member.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "Ban a member."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to ban."
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason.")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason for the ban."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("kick")
-        .setDescription("Kick a member.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "Kick a member."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to kick."
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason.")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason for the kick."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("timeout")
-        .setDescription("Timeout a member.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "Timeout a member."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to timeout."
+                )
                 .setRequired(true)
         )
-        .addIntegerOption(o =>
-            o.setName("minutes")
-                .setDescription("Duration in minutes.")
+        .addIntegerOption(option =>
+            option
+                .setName("minutes")
+                .setDescription(
+                    "Timeout duration in minutes."
+                )
                 .setMinValue(1)
                 .setMaxValue(40320)
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason.")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason for the timeout."
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("untimeout")
-        .setDescription("Remove a timeout.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "Remove a member's timeout."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warn")
-        .setDescription("Warn a member.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "Warn a member."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member."
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason.")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason for the warning."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
-        .setDescription("View warnings.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "View a member's warnings."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("clearwarnings")
-        .setDescription("Clear warnings.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member.")
+        .setDescription(
+            "Clear a member's warnings."
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("purge")
-        .setDescription("Delete messages.")
-        .addIntegerOption(o =>
-            o.setName("amount")
-                .setDescription("Amount.")
+        .setDescription(
+            "Delete recent messages."
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("amount")
+                .setDescription(
+                    "Number of messages to delete."
+                )
                 .setMinValue(1)
                 .setMaxValue(100)
                 .setRequired(true)
@@ -263,183 +418,289 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Lock the current channel."),
+        .setDescription(
+            "Lock the current channel."
+        ),
 
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Unlock the current channel."),
+        .setDescription(
+            "Unlock the current channel."
+        ),
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Set channel slowmode.")
-        .addIntegerOption(o =>
-            o.setName("seconds")
-                .setDescription("Seconds.")
+        .setDescription(
+            "Set channel slowmode."
+        )
+        .addIntegerOption(option =>
+            option
+                .setName("seconds")
+                .setDescription(
+                    "Slowmode duration."
+                )
                 .setMinValue(0)
                 .setMaxValue(21600)
                 .setRequired(true)
         ),
 
+    /* ROLE MANAGEMENT */
+
     new SlashCommandBuilder()
         .setName("role")
-        .setDescription("Manage member roles.")
-        .addSubcommand(s =>
-            s.setName("add")
-                .setDescription("Add a role.")
-                .addUserOption(o =>
-                    o.setName("user")
-                        .setDescription("Member.")
+        .setDescription(
+            "Manage member roles."
+        )
+        .addSubcommand(sub =>
+            sub
+                .setName("add")
+                .setDescription(
+                    "Add a role to a member."
+                )
+                .addUserOption(option =>
+                    option
+                        .setName("user")
+                        .setDescription(
+                            "Member."
+                        )
                         .setRequired(true)
                 )
-                .addRoleOption(o =>
-                    o.setName("role")
-                        .setDescription("Role.")
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription(
+                            "Role."
+                        )
                         .setRequired(true)
                 )
         )
-        .addSubcommand(s =>
-            s.setName("remove")
-                .setDescription("Remove a role.")
-                .addUserOption(o =>
-                    o.setName("user")
-                        .setDescription("Member.")
+        .addSubcommand(sub =>
+            sub
+                .setName("remove")
+                .setDescription(
+                    "Remove a role from a member."
+                )
+                .addUserOption(option =>
+                    option
+                        .setName("user")
+                        .setDescription(
+                            "Member."
+                        )
                         .setRequired(true)
                 )
-                .addRoleOption(o =>
-                    o.setName("role")
-                        .setDescription("Role.")
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription(
+                            "Role."
+                        )
                         .setRequired(true)
                 )
         ),
+
+    /* ANNOUNCEMENTS */
 
     new SlashCommandBuilder()
         .setName("announce")
-        .setDescription("Send an RSA announcement.")
-        .addStringOption(o =>
-            o.setName("title")
-                .setDescription("Title.")
+        .setDescription(
+            "Send an RSA announcement."
+        )
+        .addStringOption(option =>
+            option
+                .setName("title")
+                .setDescription(
+                    "Announcement title."
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("message")
-                .setDescription("Message.")
+        .addStringOption(option =>
+            option
+                .setName("message")
+                .setDescription(
+                    "Announcement message."
+                )
                 .setRequired(true)
         ),
 
+    /* EMBEDS */
+
     new SlashCommandBuilder()
         .setName("embed")
-        .setDescription("Open the embed creator."),
+        .setDescription(
+            "Open the RSA Utility embed creator."
+        ),
+
+    /* TICKETS */
 
     new SlashCommandBuilder()
         .setName("ticketsetup")
-        .setDescription("Configure the ticket system.")
-        .addChannelOption(o =>
-            o.setName("category")
-                .setDescription("Ticket category.")
-                .addChannelTypes(ChannelType.GuildCategory)
+        .setDescription(
+            "Configure the RSA Utility ticket system."
+        )
+        .addChannelOption(option =>
+            option
+                .setName("category")
+                .setDescription(
+                    "Category where tickets are created."
+                )
+                .addChannelTypes(
+                    ChannelType.GuildCategory
+                )
                 .setRequired(true)
         )
-        .addChannelOption(o =>
-            o.setName("panel")
-                .setDescription("Ticket panel channel.")
-                .addChannelTypes(ChannelType.GuildText)
+        .addChannelOption(option =>
+            option
+                .setName("panel")
+                .setDescription(
+                    "Channel where the ticket panel is sent."
+                )
+                .addChannelTypes(
+                    ChannelType.GuildText
+                )
                 .setRequired(true)
         )
-        .addChannelOption(o =>
-            o.setName("logs")
-                .setDescription("Ticket logs channel.")
-                .addChannelTypes(ChannelType.GuildText)
+        .addChannelOption(option =>
+            option
+                .setName("logs")
+                .setDescription(
+                    "Channel where ticket transcripts are sent."
+                )
+                .addChannelTypes(
+                    ChannelType.GuildText
+                )
                 .setRequired(true)
         )
-        .addRoleOption(o =>
-            o.setName("support")
-                .setDescription("Support role.")
+        .addRoleOption(option =>
+            option
+                .setName("support")
+                .setDescription(
+                    "Role that manages tickets."
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("ticketconfig")
-        .setDescription("View ticket configuration."),
-
-    new SlashCommandBuilder()
-        .setName("enrol")
-        .setDescription("Submit an RSA enrolment application."),
-
-    new SlashCommandBuilder()
-        .setName("enrolconfig")
-        .setDescription("Configure RSA enrolment.")
-        .addChannelOption(o =>
-            o.setName("channel")
-                .setDescription("Application review channel.")
-                .addChannelTypes(ChannelType.GuildText)
-                .setRequired(true)
+        .setDescription(
+            "View the ticket system configuration."
         )
-        .addRoleOption(o =>
-            o.setName("role")
-                .setDescription("Role given when approved.")
-                .setRequired(true)
-        )
-].map(c => c.toJSON());
+
+].map(command =>
+    command.toJSON()
+);
 
 /* =========================================================
-   REGISTRATION
+   REGISTER COMMANDS
 ========================================================= */
 
 async function registerCommands() {
-    const rest = new REST({ version: "10" }).setToken(TOKEN);
+    const rest = new REST({
+        version: "10"
+    }).setToken(TOKEN);
 
-    await rest.put(
-        Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-        { body: commands }
+    console.log(
+        "Registering RSA Utility commands..."
     );
 
-    console.log(`Successfully registered ${commands.length} commands.`);
+    await rest.put(
+        Routes.applicationGuildCommands(
+            CLIENT_ID,
+            GUILD_ID
+        ),
+        {
+            body: commands
+        }
+    );
+
+    console.log(
+        `Registered ${commands.length} commands.`
+    );
 }
 
 /* =========================================================
    PERMISSIONS
 ========================================================= */
 
-function hasPermission(interaction, permission) {
-    return interaction.memberPermissions?.has(permission);
+function hasPermission(
+    interaction,
+    permission
+) {
+    return interaction.memberPermissions?.has(
+        permission
+    );
 }
 
-function ticketStaff(interaction) {
-    const ticket = configs[interaction.guild.id]?.ticket;
+function isTicketStaff(interaction) {
+    const config =
+        configs[
+            interaction.guild.id
+        ]?.ticket;
 
-    if (!ticket) {
-        return hasPermission(
-            interaction,
-            PermissionsBitField.Flags.ManageChannels
+    if (!config?.supportRole) {
+        return (
+            hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageChannels
+            ) ||
+            interaction.guild.ownerId ===
+                interaction.user.id
         );
     }
 
     return (
-        interaction.member.roles.cache.has(ticket.supportRole) ||
+        interaction.member.roles.cache.has(
+            config.supportRole
+        ) ||
         hasPermission(
             interaction,
             PermissionsBitField.Flags.ManageChannels
         ) ||
-        interaction.guild.ownerId === interaction.user.id
+        interaction.guild.ownerId ===
+            interaction.user.id
     );
 }
 
-function canModerate(interaction, member) {
-    if (!member) return false;
-    if (member.id === interaction.user.id) return false;
-    if (member.id === interaction.guild.ownerId) return false;
+function canModerate(
+    interaction,
+    member
+) {
+    if (!member) {
+        return false;
+    }
 
     if (
-        interaction.guild.ownerId !== interaction.user.id &&
-        member.roles.highest.position >=
-        interaction.member.roles.highest.position
+        member.id ===
+        interaction.user.id
     ) {
         return false;
     }
 
     if (
+        member.id ===
+        interaction.guild.ownerId
+    ) {
+        return false;
+    }
+
+    if (
+        interaction.user.id !==
+        interaction.guild.ownerId
+    ) {
+        if (
+            member.roles.highest.position >=
+            interaction.member.roles.highest.position
+        ) {
+            return false;
+        }
+    }
+
+    const botMember =
+        interaction.guild.members.me;
+
+    if (
+        botMember &&
         member.roles.highest.position >=
-        interaction.guild.members.me.roles.highest.position
+            botMember.roles.highest.position
     ) {
         return false;
     }
@@ -448,941 +709,1512 @@ function canModerate(interaction, member) {
 }
 
 /* =========================================================
+   LOGGING
+========================================================= */
+
+async function sendTicketLog(
+    guild,
+    embed,
+    file = null
+) {
+    const config =
+        configs[guild.id]?.ticket;
+
+    if (!config?.logsChannel) {
+        return;
+    }
+
+    const channel =
+        guild.channels.cache.get(
+            config.logsChannel
+        );
+
+    if (!channel) {
+        return;
+    }
+
+    const payload = {
+        embeds: [embed]
+    };
+
+    if (file) {
+        payload.files = [file];
+    }
+
+    await channel.send(
+        payload
+    ).catch(() => {});
+}
+
+/* =========================================================
    READY
 ========================================================= */
 
-client.once("ready", async () => {
-    console.log(`Logged in as ${client.user.tag}`);
+client.once(
+    "ready",
+    async () => {
+        console.log(
+            `${BOT_NAME} is online as ${client.user.tag}`
+        );
 
-    client.user.setPresence({
-        status: "online",
-        activities: [
-            {
-                name: "Roblox Schools Association",
-                type: 3
-            }
-        ]
-    });
+        client.user.setPresence({
+            status: "online",
+            activities: [
+                {
+                    name: "RSA Utility",
+                    type: ActivityType.Watching
+                }
+            ]
+        });
 
-    try {
-        await registerCommands();
-    } catch (error) {
-        console.error("Command registration failed:", error);
+        try {
+            await registerCommands();
+        } catch (error) {
+            console.error(
+                "Command registration failed:",
+                error
+            );
+        }
     }
-});
+);
+
+/* =========================================================
+   INTERACTION ROUTER
+========================================================= */
+
+client.on(
+    "interactionCreate",
+    async interaction => {
+        try {
+
+            if (
+                interaction.isChatInputCommand()
+            ) {
+                await handleCommand(
+                    interaction
+                );
+                return;
+            }
+
+            if (
+                interaction.isButton()
+            ) {
+                await handleButton(
+                    interaction
+                );
+                return;
+            }
+
+            if (
+                interaction.isModalSubmit()
+            ) {
+                await handleModal(
+                    interaction
+                );
+                return;
+            }
+
+        } catch (error) {
+
+            console.error(
+                "Interaction error:",
+                error
+            );
+
+            const response = {
+                content:
+                    "Something went wrong while processing that action.",
+                ephemeral: true
+            };
+
+            if (
+                interaction.replied ||
+                interaction.deferred
+            ) {
+                await interaction.followUp(
+                    response
+                ).catch(() => {});
+            } else {
+                await interaction.reply(
+                    response
+                ).catch(() => {});
+            }
+        }
+    }
+);
 
 /* =========================================================
    COMMAND HANDLER
 ========================================================= */
 
-client.on("interactionCreate", async interaction => {
-    try {
-        if (interaction.isChatInputCommand()) {
-            await commandHandler(interaction);
-        } else if (interaction.isButton()) {
-            await buttonHandler(interaction);
-        } else if (interaction.isModalSubmit()) {
-            await modalHandler(interaction);
-        }
-    } catch (error) {
-        console.error("Interaction error:", error);
+async function handleCommand(
+    interaction
+) {
+    const command =
+        interaction.commandName;
 
-        const response = {
-            content: "An unexpected error occurred.",
-            ephemeral: true
-        };
+    /* =====================================================
+       HELP
+    ===================================================== */
 
-        if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(response).catch(() => {});
-        } else {
-            await interaction.reply(response).catch(() => {});
-        }
-    }
-});
+    if (command === "help") {
 
-async function commandHandler(i) {
-    const c = i.commandName;
+        const embed =
+            createEmbed({
+                title: "RSA Utility",
+                description:
+                    "A complete moderation, management and support utility for the Roblox Schools Association.",
+                fields: [
+                    {
+                        name: "Moderation",
+                        value:
+                            "`/ban` `/kick` `/timeout` `/untimeout`\n`/warn` `/warnings` `/clearwarnings` `/purge`"
+                    },
+                    {
+                        name: "Channel Management",
+                        value:
+                            "`/lock` `/unlock` `/slowmode`"
+                    },
+                    {
+                        name: "Roles",
+                        value:
+                            "`/role add` `/role remove`"
+                    },
+                    {
+                        name: "Information",
+                        value:
+                            "`/ping` `/botinfo` `/serverinfo` `/userinfo`"
+                    },
+                    {
+                        name: "Utilities",
+                        value:
+                            "`/announce` `/embed`"
+                    },
+                    {
+                        name: "Tickets",
+                        value:
+                            "`/ticketsetup` `/ticketconfig`"
+                    }
+                ],
+                footer:
+                    "RSA Utility"
+            });
 
-    /* HELP */
-
-    if (c === "help") {
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "RSA Administrator",
-                    description:
-                        "Administration, moderation, ticketing and enrolment tools for the Roblox Schools Association.",
-                    fields: [
-                        {
-                            name: "Moderation",
-                            value:
-                                "`/ban` `/kick` `/timeout` `/untimeout` `/warn` `/warnings` `/clearwarnings` `/purge`"
-                        },
-                        {
-                            name: "Management",
-                            value:
-                                "`/lock` `/unlock` `/slowmode` `/role` `/announce`"
-                        },
-                        {
-                            name: "Tickets",
-                            value:
-                                "`/ticketsetup` `/ticketconfig`"
-                        },
-                        {
-                            name: "Enrolment",
-                            value:
-                                "`/enrol` `/enrolconfig`"
-                        },
-                        {
-                            name: "Information",
-                            value:
-                                "`/help` `/ping` `/botinfo` `/serverinfo` `/userinfo` `/profile`"
-                        },
-                        {
-                            name: "Tools",
-                            value: "`/embed`"
-                        }
-                    ]
-                })
-            ],
+        return interaction.reply({
+            embeds: [embed],
             ephemeral: true
         });
     }
 
-    /* PING */
+    /* =====================================================
+       PING
+    ===================================================== */
 
-    if (c === "ping") {
-        return i.reply({
+    if (command === "ping") {
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Bot Status",
-                    description: `Latency: **${client.ws.ping}ms**`
+                    description:
+                        `Pong! Current WebSocket latency: **${client.ws.ping}ms**`,
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* BOT INFO */
+    /* =====================================================
+       BOT INFO
+    ===================================================== */
 
-    if (c === "botinfo") {
-        return i.reply({
+    if (command === "botinfo") {
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "RSA Administrator",
+                    title: "RSA Utility",
                     description:
-                        "Administration bot for the Roblox Schools Association.",
+                        "RSA Utility provides moderation, management, information and ticket tools.",
                     fields: [
                         {
                             name: "Version",
-                            value: VERSION,
-                            inline: true
-                        },
-                        {
-                            name: "Servers",
-                            value: `${client.guilds.cache.size}`,
+                            value:
+                                BOT_VERSION,
                             inline: true
                         },
                         {
                             name: "Latency",
-                            value: `${client.ws.ping}ms`,
+                            value:
+                                `${client.ws.ping}ms`,
+                            inline: true
+                        },
+                        {
+                            name: "Servers",
+                            value:
+                                `${client.guilds.cache.size}`,
+                            inline: true
+                        },
+                        {
+                            name: "Commands",
+                            value:
+                                `${commands.length}`,
                             inline: true
                         }
-                    ]
+                    ],
+                    footer:
+                        "Roblox Schools Association"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* SERVER INFO */
+    /* =====================================================
+       SERVER INFO
+    ===================================================== */
 
-    if (c === "serverinfo") {
-        const g = i.guild;
+    if (command === "serverinfo") {
 
-        return i.reply({
+        const guild =
+            interaction.guild;
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Server Information",
-                    thumbnail: g.iconURL({ size: 256 }),
+                    thumbnail:
+                        guild.iconURL({
+                            size: 256
+                        }),
                     fields: [
                         {
                             name: "Server",
-                            value: g.name
+                            value:
+                                guild.name,
+                            inline: true
                         },
                         {
                             name: "Members",
-                            value: `${g.memberCount}`,
+                            value:
+                                `${guild.memberCount}`,
                             inline: true
                         },
                         {
                             name: "Channels",
-                            value: `${g.channels.cache.size}`,
+                            value:
+                                `${guild.channels.cache.size}`,
                             inline: true
                         },
                         {
                             name: "Roles",
-                            value: `${g.roles.cache.size}`,
+                            value:
+                                `${guild.roles.cache.size}`,
                             inline: true
                         },
                         {
                             name: "Owner",
-                            value: `<@${g.ownerId}>`
+                            value:
+                                `<@${guild.ownerId}>`,
+                            inline: true
+                        },
+                        {
+                            name: "Created",
+                            value:
+                                `<t:${Math.floor(
+                                    guild.createdTimestamp / 1000
+                                )}:F>`
                         }
-                    ]
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* USER INFO */
+    /* =====================================================
+       USER INFO
+    ===================================================== */
 
-    if (c === "userinfo") {
+    if (command === "userinfo") {
+
         const user =
-            i.options.getUser("user") || i.user;
+            interaction.options.getUser(
+                "user"
+            ) ||
+            interaction.user;
 
         const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
 
-        return i.reply({
+        const roles =
+            member
+                ? member.roles.cache
+                    .filter(
+                        role =>
+                            role.id !==
+                            interaction.guild.id
+                    )
+                    .sort(
+                        (a, b) =>
+                            b.position -
+                            a.position
+                    )
+                    .map(
+                        role =>
+                            role.toString()
+                    )
+                    .slice(0, 15)
+                    .join(" ") ||
+                    "No roles"
+                : "Not in server";
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "User Information",
-                    thumbnail: user.displayAvatarURL({ size: 256 }),
+                    thumbnail:
+                        user.displayAvatarURL({
+                            size: 256
+                        }),
                     fields: [
                         {
                             name: "User",
-                            value: user.tag
+                            value:
+                                user.tag
                         },
                         {
-                            name: "ID",
-                            value: user.id
+                            name: "User ID",
+                            value:
+                                user.id
                         },
                         {
                             name: "Account Created",
                             value:
-                                `<t:${Math.floor(user.createdTimestamp / 1000)}:F>`
+                                `<t:${Math.floor(
+                                    user.createdTimestamp / 1000
+                                )}:F>`
                         },
                         {
                             name: "Joined Server",
                             value:
                                 member?.joinedTimestamp
-                                    ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`
-                                    : "Unknown"
-                        }
-                    ]
-                })
-            ],
-            ephemeral: true
-        });
-    }
-
-    /* PROFILE */
-
-    if (c === "profile") {
-        const user =
-            i.options.getUser("user") || i.user;
-
-        const application =
-            enrolments[`${i.guild.id}:${user.id}`];
-
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "RSA Profile",
-                    thumbnail: user.displayAvatarURL({ size: 256 }),
-                    fields: [
-                        {
-                            name: "Member",
-                            value: `${user}`
+                                    ? `<t:${Math.floor(
+                                        member.joinedTimestamp / 1000
+                                    )}:F>`
+                                    : "Not in server"
                         },
                         {
-                            name: "Username",
-                            value: user.username
-                        },
-                        {
-                            name: "Enrolment Status",
+                            name: "Roles",
                             value:
-                                application?.status ||
-                                "Not enrolled"
+                                roles
                         }
-                    ]
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* BAN */
+    /* =====================================================
+       BAN
+    ===================================================== */
 
-    if (c === "ban") {
-        if (!hasPermission(i, PermissionsBitField.Flags.BanMembers)) {
-            return i.reply({
-                content: "You need the Ban Members permission.",
+    if (command === "ban") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.BanMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Ban Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
         const reason =
-            i.options.getString("reason") ||
+            interaction.options.getString(
+                "reason"
+            ) ||
             "No reason provided.";
 
         const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
 
-        if (member && !canModerate(i, member)) {
-            return i.reply({
-                content: "You cannot moderate that member.",
+        if (
+            member &&
+            !canModerate(
+                interaction,
+                member
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You cannot ban this member because of the role hierarchy.",
                 ephemeral: true
             });
         }
 
-        await i.guild.members.ban(user.id, { reason });
+        await interaction.guild.members.ban(
+            user.id,
+            {
+                reason
+            }
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Member Banned",
                     description:
-                        `${user} has been banned.\n\n**Reason:** ${reason}`
+                        `**${user.tag}** has been banned.`,
+                    fields: [
+                        {
+                            name: "Reason",
+                            value:
+                                reason
+                        },
+                        {
+                            name: "Moderator",
+                            value:
+                                interaction.user.toString()
+                        }
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* KICK */
+    /* =====================================================
+       KICK
+    ===================================================== */
 
-    if (c === "kick") {
-        if (!hasPermission(i, PermissionsBitField.Flags.KickMembers)) {
-            return i.reply({
-                content: "You need the Kick Members permission.",
+    if (command === "kick") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.KickMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Kick Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
         const reason =
-            i.options.getString("reason") ||
+            interaction.options.getString(
+                "reason"
+            ) ||
             "No reason provided.";
 
         const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
 
-        if (!member || !canModerate(i, member)) {
-            return i.reply({
-                content: "You cannot kick that member.",
+        if (
+            !member ||
+            !canModerate(
+                interaction,
+                member
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You cannot kick this member.",
                 ephemeral: true
             });
         }
 
-        await member.kick(reason);
+        await member.kick(
+            reason
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Member Kicked",
                     description:
-                        `${user} has been kicked.\n\n**Reason:** ${reason}`
+                        `**${user.tag}** has been kicked.`,
+                    fields: [
+                        {
+                            name: "Reason",
+                            value:
+                                reason
+                        },
+                        {
+                            name: "Moderator",
+                            value:
+                                interaction.user.toString()
+                        }
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* TIMEOUT */
+    /* =====================================================
+       TIMEOUT
+    ===================================================== */
 
-    if (c === "timeout") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ModerateMembers)) {
-            return i.reply({
-                content: "You need the Moderate Members permission.",
+    if (command === "timeout") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ModerateMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
-        const minutes = i.options.getInteger("minutes");
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
+        const minutes =
+            interaction.options.getInteger(
+                "minutes"
+            );
+
         const reason =
-            i.options.getString("reason") ||
+            interaction.options.getString(
+                "reason"
+            ) ||
             "No reason provided.";
 
         const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
 
-        if (!member || !canModerate(i, member)) {
-            return i.reply({
-                content: "You cannot timeout that member.",
+        if (
+            !member ||
+            !canModerate(
+                interaction,
+                member
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You cannot timeout this member.",
                 ephemeral: true
             });
         }
 
-        await member.timeout(minutes * 60000, reason);
+        await member.timeout(
+            minutes * 60 * 1000,
+            reason
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Member Timed Out",
                     description:
-                        `${user} has been timed out for **${minutes} minutes**.\n\n**Reason:** ${reason}`
+                        `**${user.tag}** has been timed out.`,
+                    fields: [
+                        {
+                            name: "Duration",
+                            value:
+                                `${minutes} minute(s)`
+                        },
+                        {
+                            name: "Reason",
+                            value:
+                                reason
+                        },
+                        {
+                            name: "Moderator",
+                            value:
+                                interaction.user.toString()
+                        }
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* UNTIMEOUT */
+    /* =====================================================
+       UNTIMEOUT
+    ===================================================== */
 
-    if (c === "untimeout") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ModerateMembers)) {
-            return i.reply({
-                content: "You need the Moderate Members permission.",
+    if (command === "untimeout") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ModerateMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
         const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
 
-        if (!member || !canModerate(i, member)) {
-            return i.reply({
-                content: "You cannot modify that member.",
+        if (
+            !member ||
+            !canModerate(
+                interaction,
+                member
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You cannot modify this member.",
                 ephemeral: true
             });
         }
 
-        await member.timeout(null);
+        await member.timeout(
+            null,
+            `Timeout removed by ${interaction.user.tag}`
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Timeout Removed",
-                    description: `The timeout has been removed from ${user}.`
+                    description:
+                        `The timeout has been removed from **${user.tag}**.`,
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* WARN */
+    /* =====================================================
+       WARN
+    ===================================================== */
 
-    if (c === "warn") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ModerateMembers)) {
-            return i.reply({
-                content: "You need the Moderate Members permission.",
+    if (command === "warn") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ModerateMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
-        const reason = i.options.getString("reason");
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
+        const reason =
+            interaction.options.getString(
+                "reason"
+            );
 
         const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
 
-        if (!member || !canModerate(i, member)) {
-            return i.reply({
-                content: "You cannot warn that member.",
+        if (
+            !member ||
+            !canModerate(
+                interaction,
+                member
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You cannot warn this member.",
                 ephemeral: true
             });
         }
 
-        const key = `${i.guild.id}:${user.id}`;
+        const key =
+            `${interaction.guild.id}:${user.id}`;
 
-        if (!warnings[key]) warnings[key] = [];
+        if (!warnings[key]) {
+            warnings[key] = [];
+        }
 
         warnings[key].push({
             reason,
-            moderator: i.user.id,
-            timestamp: Date.now()
+            moderator:
+                interaction.user.id,
+            timestamp:
+                Date.now()
         });
 
-        save(WARNINGS_FILE, warnings);
+        saveJSON(
+            WARNINGS_FILE,
+            warnings
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Member Warned",
                     description:
-                        `${user} has been warned.\n\n**Reason:** ${reason}`
+                        `**${user.tag}** has been warned.`,
+                    fields: [
+                        {
+                            name: "Reason",
+                            value:
+                                reason
+                        },
+                        {
+                            name: "Moderator",
+                            value:
+                                interaction.user.toString()
+                        }
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* WARNINGS */
+    /* =====================================================
+       WARNINGS
+    ===================================================== */
 
-    if (c === "warnings") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ModerateMembers)) {
-            return i.reply({
-                content: "You need the Moderate Members permission.",
+    if (command === "warnings") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ModerateMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
+        const key =
+            `${interaction.guild.id}:${user.id}`;
+
         const list =
-            warnings[`${i.guild.id}:${user.id}`] || [];
+            warnings[key] || [];
+
+        if (!list.length) {
+            return interaction.reply({
+                embeds: [
+                    createEmbed({
+                        title: "Warnings",
+                        description:
+                            `**${user.tag}** has no warnings.`,
+                        footer:
+                            "RSA Utility"
+                    })
+                ],
+                ephemeral: true
+            });
+        }
 
         const description =
-            list.length
-                ? list.map(
-                    (w, n) =>
-                        `**${n + 1}.** ${w.reason}\nModerator: <@${w.moderator}>\n<t:${Math.floor(w.timestamp / 1000)}:R>`
-                ).join("\n\n")
-                : `${user} has no warnings.`;
+            list
+                .map(
+                    (item, index) =>
+                        `**${index + 1}.** ${item.reason}\n` +
+                        `Moderator: <@${item.moderator}>\n` +
+                        `<t:${Math.floor(
+                            item.timestamp / 1000
+                        )}:R>`
+                )
+                .join("\n\n");
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "Warnings",
-                    description
+                    title:
+                        `Warnings — ${user.tag}`,
+                    description:
+                        description.slice(
+                            0,
+                            4000
+                        ),
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* CLEAR WARNINGS */
+    /* =====================================================
+       CLEAR WARNINGS
+    ===================================================== */
 
-    if (c === "clearwarnings") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ModerateMembers)) {
-            return i.reply({
-                content: "You need the Moderate Members permission.",
+    if (command === "clearwarnings") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ModerateMembers
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Moderate Members permission.",
                 ephemeral: true
             });
         }
 
-        const user = i.options.getUser("user");
-        delete warnings[`${i.guild.id}:${user.id}`];
-        save(WARNINGS_FILE, warnings);
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
 
-        return i.reply({
+        const key =
+            `${interaction.guild.id}:${user.id}`;
+
+        delete warnings[key];
+
+        saveJSON(
+            WARNINGS_FILE,
+            warnings
+        );
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Warnings Cleared",
                     description:
-                        `All warnings for ${user} have been cleared.`
+                        `All warnings for **${user.tag}** have been cleared.`,
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* PURGE */
+    /* =====================================================
+       PURGE
+    ===================================================== */
 
-    if (c === "purge") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageMessages)) {
-            return i.reply({
-                content: "You need the Manage Messages permission.",
+    if (command === "purge") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageMessages
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Messages permission.",
                 ephemeral: true
             });
         }
 
-        const amount = i.options.getInteger("amount");
-        const deleted =
-            await i.channel.bulkDelete(amount, true);
+        const amount =
+            interaction.options.getInteger(
+                "amount"
+            );
 
-        return i.reply({
+        const deleted =
+            await interaction.channel.bulkDelete(
+                amount,
+                true
+            );
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Messages Purged",
                     description:
-                        `Deleted **${deleted.size}** messages.`
+                        `Deleted **${deleted.size}** message(s).`,
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* LOCK */
+    /* =====================================================
+       LOCK
+    ===================================================== */
 
-    if (c === "lock") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageChannels)) {
-            return i.reply({
-                content: "You need the Manage Channels permission.",
+    if (command === "lock") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageChannels
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Channels permission.",
                 ephemeral: true
             });
         }
 
-        await i.channel.permissionOverwrites.edit(
-            i.guild.roles.everyone,
-            { SendMessages: false }
+        await interaction.channel.permissionOverwrites.edit(
+            interaction.guild.roles.everyone,
+            {
+                SendMessages: false
+            }
         );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Channel Locked",
-                    description: `${i.channel} has been locked.`
+                    description:
+                        "This channel has been locked.",
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* UNLOCK */
+    /* =====================================================
+       UNLOCK
+    ===================================================== */
 
-    if (c === "unlock") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageChannels)) {
-            return i.reply({
-                content: "You need the Manage Channels permission.",
+    if (command === "unlock") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageChannels
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Channels permission.",
                 ephemeral: true
             });
         }
 
-        await i.channel.permissionOverwrites.edit(
-            i.guild.roles.everyone,
-            { SendMessages: null }
+        await interaction.channel.permissionOverwrites.edit(
+            interaction.guild.roles.everyone,
+            {
+                SendMessages: null
+            }
         );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Channel Unlocked",
-                    description: `${i.channel} has been unlocked.`
+                    description:
+                        "This channel has been unlocked.",
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* SLOWMODE */
+    /* =====================================================
+       SLOWMODE
+    ===================================================== */
 
-    if (c === "slowmode") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageChannels)) {
-            return i.reply({
-                content: "You need the Manage Channels permission.",
+    if (command === "slowmode") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageChannels
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Channels permission.",
                 ephemeral: true
             });
         }
 
-        const seconds = i.options.getInteger("seconds");
+        const seconds =
+            interaction.options.getInteger(
+                "seconds"
+            );
 
-        await i.channel.setRateLimitPerUser(seconds);
+        await interaction.channel.setRateLimitPerUser(
+            seconds
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Slowmode Updated",
                     description:
                         seconds === 0
                             ? "Slowmode has been disabled."
-                            : `Slowmode is now **${seconds} seconds**.`
+                            : `Slowmode is now set to **${seconds} seconds**.`,
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* ROLE */
+    /* =====================================================
+       ROLE
+    ===================================================== */
 
-    if (c === "role") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageRoles)) {
-            return i.reply({
-                content: "You need the Manage Roles permission.",
+    if (command === "role") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageRoles
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Roles permission.",
                 ephemeral: true
             });
         }
 
-        const sub = i.options.getSubcommand();
-        const user = i.options.getUser("user");
-        const role = i.options.getRole("role");
+        const subcommand =
+            interaction.options.getSubcommand();
+
+        const user =
+            interaction.options.getUser(
+                "user"
+            );
+
+        const role =
+            interaction.options.getRole(
+                "role"
+            );
+
+        const member =
+            await interaction.guild.members
+                .fetch(user.id)
+                .catch(() => null);
+
+        if (!member) {
+            return interaction.reply({
+                content:
+                    "Member not found.",
+                ephemeral: true
+            });
+        }
 
         if (
             role.position >=
-            i.guild.members.me.roles.highest.position
+            interaction.member.roles.highest.position &&
+            interaction.user.id !==
+                interaction.guild.ownerId
         ) {
-            return i.reply({
-                content: "My role is not high enough to manage that role.",
+            return interaction.reply({
+                content:
+                    "You cannot manage that role.",
                 ephemeral: true
             });
         }
 
-        const member =
-            await i.guild.members.fetch(user.id).catch(() => null);
+        const botMember =
+            interaction.guild.members.me;
 
-        if (!member) {
-            return i.reply({
-                content: "Member not found.",
+        if (
+            botMember &&
+            role.position >=
+                botMember.roles.highest.position
+        ) {
+            return interaction.reply({
+                content:
+                    "My bot role is not high enough to manage that role.",
                 ephemeral: true
             });
         }
 
-        if (sub === "add") {
-            await member.roles.add(role);
-        } else {
-            await member.roles.remove(role);
+        if (subcommand === "add") {
+            await member.roles.add(
+                role
+            );
+
+            return interaction.reply({
+                embeds: [
+                    createEmbed({
+                        title: "Role Added",
+                        description:
+                            `Added ${role} to **${user.tag}**.`,
+                        footer:
+                            "RSA Utility"
+                    })
+                ]
+            });
         }
 
-        return i.reply({
+        await member.roles.remove(
+            role
+        );
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "Role Updated",
+                    title: "Role Removed",
                     description:
-                        `${role} was ${sub === "add" ? "added to" : "removed from"} ${user}.`
+                        `Removed ${role} from **${user.tag}**.`,
+                    footer:
+                        "RSA Utility"
                 })
             ]
         });
     }
 
-    /* ANNOUNCE */
+    /* =====================================================
+       ANNOUNCE
+    ===================================================== */
 
-    if (c === "announce") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageMessages)) {
-            return i.reply({
-                content: "You need the Manage Messages permission.",
+    if (command === "announce") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageMessages
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Messages permission.",
                 ephemeral: true
             });
         }
 
-        const title = i.options.getString("title");
-        const message = i.options.getString("message");
+        const title =
+            interaction.options.getString(
+                "title"
+            );
 
-        await i.channel.send({
+        const message =
+            interaction.options.getString(
+                "message"
+            );
+
+        await interaction.channel.send({
             embeds: [
                 createEmbed({
                     title,
-                    description: message,
-                    footer: "Roblox Schools Association"
+                    description:
+                        message,
+                    footer:
+                        "Roblox Schools Association"
                 })
             ]
         });
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
                     title: "Announcement Sent",
-                    description: "The announcement has been sent."
+                    description:
+                        "The announcement has been sent.",
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* TICKET SETUP */
+    /* =====================================================
+       EMBED CREATOR
+    ===================================================== */
 
-    if (c === "ticketsetup") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageGuild)) {
-            return i.reply({
-                content: "You need the Manage Server permission.",
+    if (command === "embed") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageMessages
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Messages permission.",
                 ephemeral: true
             });
         }
 
-        const category = i.options.getChannel("category");
-        const panel = i.options.getChannel("panel");
-        const logs = i.options.getChannel("logs");
-        const support = i.options.getRole("support");
+        embedSessions.set(
+            interaction.user.id,
+            {
+                title:
+                    "RSA Announcement",
+                description:
+                    "",
+                footer:
+                    "Roblox Schools Association",
+                image:
+                    "",
+                thumbnail:
+                    "",
+                fields:
+                    []
+            }
+        );
 
-        configs[i.guild.id] ??= {};
+        return showEmbedBuilder(
+            interaction
+        );
+    }
 
-        configs[i.guild.id].ticket = {
-            category: category.id,
-            panel: panel.id,
-            logs: logs.id,
-            support: support.id
+    /* =====================================================
+       TICKET SETUP
+    ===================================================== */
+
+    if (command === "ticketsetup") {
+
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageGuild
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You need the Manage Server permission.",
+                ephemeral: true
+            });
+        }
+
+        const category =
+            interaction.options.getChannel(
+                "category"
+            );
+
+        const panel =
+            interaction.options.getChannel(
+                "panel"
+            );
+
+        const logs =
+            interaction.options.getChannel(
+                "logs"
+            );
+
+        const support =
+            interaction.options.getRole(
+                "support"
+            );
+
+        configs[
+            interaction.guild.id
+        ] = {
+            ...(
+                configs[
+                    interaction.guild.id
+                ] || {}
+            ),
+            ticket: {
+                category:
+                    category.id,
+                panelChannel:
+                    panel.id,
+                logsChannel:
+                    logs.id,
+                supportRole:
+                    support.id
+            }
         };
 
-        save(CONFIG_FILE, configs);
+        saveJSON(
+            CONFIG_FILE,
+            configs
+        );
+
+        const panelEmbed =
+            createEmbed({
+                title:
+                    "RSA Support",
+                description:
+                    "Need assistance? Click the button below to open a private support ticket.\n\nA member of the support team will assist you as soon as possible.",
+                footer:
+                    "Roblox Schools Association"
+            });
+
+        const row =
+            new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(
+                            "ticket_create"
+                        )
+                        .setLabel(
+                            "Create Ticket"
+                        )
+                        .setStyle(
+                            ButtonStyle.Primary
+                        )
+                );
 
         await panel.send({
             embeds: [
-                createEmbed({
-                    title: "RSA Support",
-                    description:
-                        "Need assistance? Click the button below to create a private support ticket.",
-                    footer: "Roblox Schools Association"
-                })
+                panelEmbed
             ],
             components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("ticket_create")
-                        .setLabel("Create Ticket")
-                        .setStyle(ButtonStyle.Primary)
-                )
+                row
             ]
         });
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "Ticket System Configured",
+                    title:
+                        "Ticket System Configured",
                     description:
-                        `**Category:** ${category}\n**Panel:** ${panel}\n**Logs:** ${logs}\n**Support:** ${support}`
-                })
-            ],
-            ephemeral: true
-        });
-    }
-
-    /* TICKET CONFIG */
-
-    if (c === "ticketconfig") {
-        const t = configs[i.guild.id]?.ticket;
-
-        if (!t) {
-            return i.reply({
-                content: "The ticket system has not been configured.",
-                ephemeral: true
-            });
-        }
-
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "Ticket Configuration",
+                        "The RSA Utility ticket system has been configured successfully.",
                     fields: [
                         {
                             name: "Category",
-                            value: `<#${t.category}>`
+                            value:
+                                category.toString()
                         },
                         {
-                            name: "Panel",
-                            value: `<#${t.panel}>`
+                            name: "Panel Channel",
+                            value:
+                                panel.toString()
                         },
                         {
-                            name: "Logs",
-                            value: `<#${t.logs}>`
+                            name: "Logs Channel",
+                            value:
+                                logs.toString()
                         },
                         {
-                            name: "Support",
-                            value: `<@&${t.support}>`
+                            name: "Support Role",
+                            value:
+                                support.toString()
                         }
-                    ]
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* ENROL CONFIG */
+    /* =====================================================
+       TICKET CONFIG
+    ===================================================== */
 
-    if (c === "enrolconfig") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageGuild)) {
-            return i.reply({
-                content: "You need the Manage Server permission.",
-                ephemeral: true
-            });
-        }
+    if (command === "ticketconfig") {
 
-        const channel = i.options.getChannel("channel");
-        const role = i.options.getRole("role");
-
-        configs[i.guild.id] ??= {};
-
-        configs[i.guild.id].enrol = {
-            channel: channel.id,
-            role: role.id
-        };
-
-        save(CONFIG_FILE, configs);
-
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "Enrolment Configured",
-                    description:
-                        `Applications will be sent to ${channel}.\nApproved applicants will receive ${role}.`
-                })
-            ],
-            ephemeral: true
-        });
-    }
-
-    /* ENROL */
-
-    if (c === "enrol") {
-        const config = configs[i.guild.id]?.enrol;
-
-        if (!config) {
-            return i.reply({
+        if (
+            !hasPermission(
+                interaction,
+                PermissionsBitField.Flags.ManageGuild
+            )
+        ) {
+            return interaction.reply({
                 content:
-                    "The enrolment system has not been configured yet.",
+                    "You need the Manage Server permission.",
                 ephemeral: true
             });
         }
 
-        const modal = new ModalBuilder()
-            .setCustomId("enrol_modal")
-            .setTitle("RSA Enrolment");
+        const ticket =
+            configs[
+                interaction.guild.id
+            ]?.ticket;
 
-        const roblox = new TextInputBuilder()
-            .setCustomId("roblox")
-            .setLabel("Roblox Username")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(50);
-
-        const reason = new TextInputBuilder()
-            .setCustomId("reason")
-            .setLabel("Why do you want to join RSA?")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-            .setMaxLength(1000);
-
-        const organisation = new TextInputBuilder()
-            .setCustomId("organisation")
-            .setLabel("School / Organisation")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100);
-
-        const position = new TextInputBuilder()
-            .setCustomId("position")
-            .setLabel("Position / Role")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(roblox),
-            new ActionRowBuilder().addComponents(reason),
-            new ActionRowBuilder().addComponents(organisation),
-            new ActionRowBuilder().addComponents(position)
-        );
-
-        return i.showModal(modal);
-    }
-
-    /* EMBED */
-
-    if (c === "embed") {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageMessages)) {
-            return i.reply({
-                content: "You need the Manage Messages permission.",
+        if (!ticket) {
+            return interaction.reply({
+                content:
+                    "The ticket system has not been configured yet.",
                 ephemeral: true
             });
         }
 
-        embedSessions.set(i.user.id, {
-            title: "RSA Announcement",
-            description: "",
-            footer: "Roblox Schools Association"
-        });
-
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "Embed Creator",
-                    description:
-                        "Use the buttons below to create an embed."
+                    title:
+                        "Ticket Configuration",
+                    fields: [
+                        {
+                            name: "Category",
+                            value:
+                                `<#${ticket.category}>`
+                        },
+                        {
+                            name: "Panel Channel",
+                            value:
+                                `<#${ticket.panelChannel}>`
+                        },
+                        {
+                            name: "Logs Channel",
+                            value:
+                                `<#${ticket.logsChannel}>`
+                        },
+                        {
+                            name: "Support Role",
+                            value:
+                                `<@&${ticket.supportRole}>`
+                        }
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
-            ],
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("embed_title")
-                        .setLabel("Title")
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId("embed_description")
-                        .setLabel("Description")
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId("embed_send")
-                        .setLabel("Send")
-                        .setStyle(ButtonStyle.Success),
-                    new ButtonBuilder()
-                        .setCustomId("embed_cancel")
-                        .setLabel("Cancel")
-                        .setStyle(ButtonStyle.Danger)
-                )
             ],
             ephemeral: true
         });
@@ -1390,815 +2222,1825 @@ async function commandHandler(i) {
 }
 
 /* =========================================================
-   BUTTONS
+   EMBED CREATOR
 ========================================================= */
 
-async function buttonHandler(i) {
+function buildCreatorEmbed(
+    session
+) {
+    return createEmbed({
+        title:
+            session.title ||
+            "RSA Announcement",
+        description:
+            session.description ||
+            "Use the controls below to build your embed.",
+        footer:
+            session.footer ||
+            "Roblox Schools Association",
+        image:
+            session.image ||
+            undefined,
+        thumbnail:
+            session.thumbnail ||
+            undefined,
+        fields:
+            session.fields.length
+                ? session.fields
+                : undefined
+    });
+}
 
-    /* CREATE TICKET */
-
-    if (i.customId === "ticket_create") {
-        const t = configs[i.guild.id]?.ticket;
-
-        if (!t) {
-            return i.reply({
-                content: "Tickets are not configured.",
-                ephemeral: true
-            });
-        }
-
-        const existing = i.guild.channels.cache.find(
-            c =>
-                c.type === ChannelType.GuildText &&
-                c.topic === `ticket-owner:${i.user.id}`
+async function showEmbedBuilder(
+    interaction
+) {
+    const session =
+        embedSessions.get(
+            interaction.user.id
         );
 
-        if (existing) {
-            return i.reply({
-                content: `You already have a ticket: ${existing}`,
-                ephemeral: true
-            });
-        }
-
-        await i.deferReply({ ephemeral: true });
-
-        const channel = await i.guild.channels.create({
-            name: `ticket-${i.user.username}`
-                .toLowerCase()
-                .replace(/[^a-z0-9]/g, "-")
-                .slice(0, 25),
-            type: ChannelType.GuildText,
-            parent: t.category,
-            topic: `ticket-owner:${i.user.id}`,
-            permissionOverwrites: [
-                {
-                    id: i.guild.roles.everyone.id,
-                    deny: [PermissionsBitField.Flags.ViewChannel]
-                },
-                {
-                    id: i.user.id,
-                    allow: [
-                        PermissionsBitField.Flags.ViewChannel,
-                        PermissionsBitField.Flags.SendMessages,
-                        PermissionsBitField.Flags.ReadMessageHistory
-                    ]
-                },
-                {
-                    id: t.support,
-                    allow: [
-                        PermissionsBitField.Flags.ViewChannel,
-                        PermissionsBitField.Flags.SendMessages,
-                        PermissionsBitField.Flags.ReadMessageHistory,
-                        PermissionsBitField.Flags.ManageMessages
-                    ]
-                },
-                {
-                    id: client.user.id,
-                    allow: [
-                        PermissionsBitField.Flags.ViewChannel,
-                        PermissionsBitField.Flags.SendMessages,
-                        PermissionsBitField.Flags.ReadMessageHistory,
-                        PermissionsBitField.Flags.ManageChannels,
-                        PermissionsBitField.Flags.ManageMessages
-                    ]
-                }
-            ]
-        });
-
-        await channel.send({
-            content: `${i.user} <@&${t.support}>`,
-            embeds: [
-                createEmbed({
-                    title: "Support Ticket",
-                    description:
-                        `Welcome ${i.user}.\n\nPlease explain your enquiry clearly. A member of the support team will assist you shortly.`,
-                    fields: [
-                        {
-                            name: "Ticket Owner",
-                            value: `${i.user}`
-                        },
-                        {
-                            name: "Status",
-                            value: "Unclaimed"
-                        }
-                    ]
-                })
-            ],
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("ticket_claim")
-                        .setLabel("Claim")
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_close")
-                        .setLabel("Close")
-                        .setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_mod")
-                        .setLabel("Mod Panel")
-                        .setStyle(ButtonStyle.Secondary)
-                )
-            ]
-        });
-
-        return i.editReply({
-            content: `Your ticket has been created: ${channel}`
-        });
-    }
-
-    /* CLAIM */
-
-    if (i.customId === "ticket_claim") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot claim tickets.",
-                ephemeral: true
-            });
-        }
-
-        return i.update({
-            embeds: [
-                createEmbed({
-                    title: "Support Ticket",
-                    description:
-                        `This ticket has been claimed by ${i.user}.`,
-                    fields: [
-                        {
-                            name: "Status",
-                            value: `Claimed by ${i.user}`
-                        }
-                    ]
-                })
-            ],
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("ticket_unclaim")
-                        .setLabel("Unclaim")
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_close")
-                        .setLabel("Close")
-                        .setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_mod")
-                        .setLabel("Mod Panel")
-                        .setStyle(ButtonStyle.Secondary)
-                )
-            ]
-        });
-    }
-
-    /* UNCLAIM */
-
-    if (i.customId === "ticket_unclaim") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot unclaim tickets.",
-                ephemeral: true
-            });
-        }
-
-        return i.update({
-            embeds: [
-                createEmbed({
-                    title: "Support Ticket",
-                    description: "This ticket is currently unclaimed.",
-                    fields: [
-                        {
-                            name: "Status",
-                            value: "Unclaimed"
-                        }
-                    ]
-                })
-            ],
-            components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("ticket_claim")
-                        .setLabel("Claim")
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_close")
-                        .setLabel("Close")
-                        .setStyle(ButtonStyle.Danger),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_mod")
-                        .setLabel("Mod Panel")
-                        .setStyle(ButtonStyle.Secondary)
-                )
-            ]
-        });
-    }
-
-    /* CLOSE */
-
-    if (i.customId === "ticket_close") {
-        const owner = i.channel.topic?.match(
-            /ticket-owner:(\d+)/
-        )?.[1];
-
-        if (
-            !ticketStaff(i) &&
-            owner !== i.user.id
-        ) {
-            return i.reply({
-                content: "You cannot close this ticket.",
-                ephemeral: true
-            });
-        }
-
-        await i.reply({
-            embeds: [
-                createEmbed({
-                    title: "Ticket Closing",
-                    description:
-                        "This ticket will be deleted in a few seconds."
-                })
-            ]
-        });
-
-        setTimeout(
-            () => i.channel.delete().catch(() => {}),
-            3000
-        );
-
+    if (!session) {
         return;
     }
 
-    /* MOD PANEL */
+    const row1 =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_title"
+                    )
+                    .setLabel(
+                        "Title"
+                    )
+                    .setStyle(
+                        ButtonStyle.Primary
+                    ),
 
-    if (i.customId === "ticket_mod") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot use the moderator panel.",
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_description"
+                    )
+                    .setLabel(
+                        "Description"
+                    )
+                    .setStyle(
+                        ButtonStyle.Primary
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_extra"
+                    )
+                    .setLabel(
+                        "Images / Footer"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    )
+            );
+
+    const row2 =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_field"
+                    )
+                    .setLabel(
+                        "Add Field"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_preview"
+                    )
+                    .setLabel(
+                        "Preview"
+                    )
+                    .setStyle(
+                        ButtonStyle.Success
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_send"
+                    )
+                    .setLabel(
+                        "Send"
+                    )
+                    .setStyle(
+                        ButtonStyle.Success
+                    ),
+
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_cancel"
+                    )
+                    .setLabel(
+                        "Cancel"
+                    )
+                    .setStyle(
+                        ButtonStyle.Danger
+                    )
+            );
+
+    const payload = {
+        content:
+            "### RSA Utility Embed Creator\nBuild your embed using the controls below.",
+        embeds: [
+            buildCreatorEmbed(
+                session
+            )
+        ],
+        components: [
+            row1,
+            row2
+        ],
+        ephemeral: true
+    };
+
+    if (
+        interaction.replied ||
+        interaction.deferred
+    ) {
+        return interaction.editReply(
+            payload
+        );
+    }
+
+    return interaction.reply(
+        payload
+    );
+}
+
+/* =========================================================
+   BUTTON HANDLER
+========================================================= */
+
+async function handleButton(
+    interaction
+) {
+
+    /* =====================================================
+       CREATE TICKET
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_create"
+    ) {
+
+        const config =
+            configs[
+                interaction.guild.id
+            ]?.ticket;
+
+        if (!config) {
+            return interaction.reply({
+                content:
+                    "The ticket system has not been configured.",
                 ephemeral: true
             });
         }
 
-        return i.reply({
+        await interaction.deferReply({
+            ephemeral: true
+        });
+
+        const existing =
+            interaction.guild.channels.cache.find(
+                channel =>
+                    channel.type ===
+                        ChannelType.GuildText &&
+                    channel.topic ===
+                        `ticket-owner:${interaction.user.id}`
+            );
+
+        if (existing) {
+            return interaction.editReply({
+                content:
+                    `You already have an open ticket: ${existing}`
+            });
+        }
+
+        const category =
+            interaction.guild.channels.cache.get(
+                config.category
+            );
+
+        const supportRole =
+            interaction.guild.roles.cache.get(
+                config.supportRole
+            );
+
+        if (!category) {
+            return interaction.editReply({
+                content:
+                    "The configured ticket category no longer exists."
+            });
+        }
+
+        if (!supportRole) {
+            return interaction.editReply({
+                content:
+                    "The configured support role no longer exists."
+            });
+        }
+
+        const safeName =
+            interaction.user.username
+                .toLowerCase()
+                .replace(
+                    /[^a-z0-9]/g,
+                    "-"
+                )
+                .replace(
+                    /-+/g,
+                    "-"
+                )
+                .replace(
+                    /^-|-$/g,
+                    ""
+                )
+                .slice(
+                    0,
+                    20
+                ) ||
+            "user";
+
+        const channel =
+            await interaction.guild.channels.create({
+                name:
+                    `ticket-${safeName}`,
+                type:
+                    ChannelType.GuildText,
+                parent:
+                    category.id,
+                topic:
+                    `ticket-owner:${interaction.user.id}`,
+                permissionOverwrites: [
+                    {
+                        id:
+                            interaction.guild.roles.everyone.id,
+                        deny: [
+                            PermissionsBitField.Flags.ViewChannel
+                        ]
+                    },
+                    {
+                        id:
+                            interaction.user.id,
+                        allow: [
+                            PermissionsBitField.Flags.ViewChannel,
+                            PermissionsBitField.Flags.SendMessages,
+                            PermissionsBitField.Flags.ReadMessageHistory
+                        ]
+                    },
+                    {
+                        id:
+                            supportRole.id,
+                        allow: [
+                            PermissionsBitField.Flags.ViewChannel,
+                            PermissionsBitField.Flags.SendMessages,
+                            PermissionsBitField.Flags.ReadMessageHistory,
+                            PermissionsBitField.Flags.ManageMessages
+                        ]
+                    },
+                    {
+                        id:
+                            client.user.id,
+                        allow: [
+                            PermissionsBitField.Flags.ViewChannel,
+                            PermissionsBitField.Flags.SendMessages,
+                            PermissionsBitField.Flags.ReadMessageHistory,
+                            PermissionsBitField.Flags.ManageChannels,
+                            PermissionsBitField.Flags.ManageMessages
+                        ]
+                    }
+                ]
+            });
+
+        const ticketEmbed =
+            createEmbed({
+                title:
+                    "Support Ticket",
+                description:
+                    `Welcome ${interaction.user}.\n\nPlease explain your enquiry clearly and provide any relevant information. A member of the support team will assist you shortly.`,
+                fields: [
+                    {
+                        name:
+                            "Ticket Owner",
+                        value:
+                            interaction.user.toString()
+                    },
+                    {
+                        name:
+                            "Status",
+                        value:
+                            "Unclaimed"
+                    }
+                ],
+                footer:
+                    "RSA Utility"
+            });
+
+        const buttons =
+            new ActionRowBuilder()
+                .addComponents(
+                    new ButtonBuilder()
+                        .setCustomId(
+                            "ticket_claim"
+                        )
+                        .setLabel(
+                            "Claim"
+                        )
+                        .setStyle(
+                            ButtonStyle.Primary
+                        ),
+
+                    new ButtonBuilder()
+                        .setCustomId(
+                            "ticket_close"
+                        )
+                        .setLabel(
+                            "Close"
+                        )
+                        .setStyle(
+                            ButtonStyle.Danger
+                        ),
+
+                    new ButtonBuilder()
+                        .setCustomId(
+                            "ticket_modpanel"
+                        )
+                        .setLabel(
+                            "Mod Panel"
+                        )
+                        .setStyle(
+                            ButtonStyle.Secondary
+                        )
+                );
+
+        await channel.send({
+            content:
+                `${interaction.user} <@&${supportRole.id}>`,
+            embeds: [
+                ticketEmbed
+            ],
+            components: [
+                buttons
+            ]
+        });
+
+        await sendTicketLog(
+            interaction.guild,
+            createEmbed({
+                title:
+                    "Ticket Created",
+                description:
+                    `A new support ticket has been created.`,
+                fields: [
+                    {
+                        name:
+                            "Ticket",
+                        value:
+                            channel.toString()
+                    },
+                    {
+                        name:
+                            "Owner",
+                        value:
+                            interaction.user.toString()
+                    }
+                ],
+                footer:
+                    "RSA Utility"
+            })
+        );
+
+        return interaction.editReply({
+            content:
+                `Your ticket has been created: ${channel}`
+        });
+    }
+
+    /* =====================================================
+       CLAIM
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_claim"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to claim tickets.",
+                ephemeral: true
+            });
+        }
+
+        const ownerId =
+            getTicketOwner(
+                interaction.channel
+            );
+
+        const embed =
+            createEmbed({
+                title:
+                    "Support Ticket",
+                description:
+                    ownerId
+                        ? `Welcome <@${ownerId}>.\n\nPlease explain your enquiry clearly and provide any relevant information.`
+                        : "Support ticket.",
+                fields: [
+                    {
+                        name:
+                            "Ticket Owner",
+                        value:
+                            ownerId
+                                ? `<@${ownerId}>`
+                                : "Unknown"
+                    },
+                    {
+                        name:
+                            "Status",
+                        value:
+                            `Claimed by ${interaction.user}`
+                    }
+                ],
+                footer:
+                    "RSA Utility"
+            });
+
+        return interaction.update({
+            embeds: [
+                embed
+            ],
+            components: [
+                new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_unclaim"
+                            )
+                            .setLabel(
+                                "Unclaim"
+                            )
+                            .setStyle(
+                                ButtonStyle.Primary
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_close"
+                            )
+                            .setLabel(
+                                "Close"
+                            )
+                            .setStyle(
+                                ButtonStyle.Danger
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_modpanel"
+                            )
+                            .setLabel(
+                                "Mod Panel"
+                            )
+                            .setStyle(
+                                ButtonStyle.Secondary
+                            )
+                    )
+            ]
+        });
+    }
+
+    /* =====================================================
+       UNCLAIM
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_unclaim"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to unclaim tickets.",
+                ephemeral: true
+            });
+        }
+
+        const ownerId =
+            getTicketOwner(
+                interaction.channel
+            );
+
+        return interaction.update({
             embeds: [
                 createEmbed({
-                    title: "Ticket Moderator Panel",
+                    title:
+                        "Support Ticket",
                     description:
-                        "Use the controls below to manage this ticket."
+                        ownerId
+                            ? `Welcome <@${ownerId}>.\n\nPlease explain your enquiry clearly and provide any relevant information.`
+                            : "Support ticket.",
+                    fields: [
+                        {
+                            name:
+                                "Ticket Owner",
+                            value:
+                                ownerId
+                                    ? `<@${ownerId}>`
+                                    : "Unknown"
+                        },
+                        {
+                            name:
+                                "Status",
+                            value:
+                                "Unclaimed"
+                        }
+                    ],
+                    footer:
+                        "RSA Utility"
                 })
             ],
             components: [
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("ticket_rename")
-                        .setLabel("Rename")
-                        .setStyle(ButtonStyle.Primary),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_unclaim")
-                        .setLabel("Unclaim")
-                        .setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_add")
-                        .setLabel("Add User")
-                        .setStyle(ButtonStyle.Secondary),
-                    new ButtonBuilder()
-                        .setCustomId("ticket_remove")
-                        .setLabel("Remove User")
-                        .setStyle(ButtonStyle.Secondary)
+                new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_claim"
+                            )
+                            .setLabel(
+                                "Claim"
+                            )
+                            .setStyle(
+                                ButtonStyle.Primary
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_close"
+                            )
+                            .setLabel(
+                                "Close"
+                            )
+                            .setStyle(
+                                ButtonStyle.Danger
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_modpanel"
+                            )
+                            .setLabel(
+                                "Mod Panel"
+                            )
+                            .setStyle(
+                                ButtonStyle.Secondary
+                            )
+                    )
+            ]
+        });
+    }
+
+    /* =====================================================
+       CLOSE
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_close"
+    ) {
+
+        const ownerId =
+            getTicketOwner(
+                interaction.channel
+            );
+
+        if (
+            !isTicketStaff(
+                interaction
+            ) &&
+            ownerId !==
+                interaction.user.id
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to close this ticket.",
+                ephemeral: true
+            });
+        }
+
+        return closeTicket(
+            interaction
+        );
+    }
+
+    /* =====================================================
+       MOD PANEL
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_modpanel"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to use the moderator panel.",
+                ephemeral: true
+            });
+        }
+
+        return interaction.reply({
+            embeds: [
+                createEmbed({
+                    title:
+                        "Ticket Moderator Panel",
+                    description:
+                        "Use the controls below to manage this ticket.",
+                    footer:
+                        "RSA Utility"
+                })
+            ],
+            components: [
+                new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_rename"
+                            )
+                            .setLabel(
+                                "Rename"
+                            )
+                            .setStyle(
+                                ButtonStyle.Primary
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_unclaim"
+                            )
+                            .setLabel(
+                                "Unclaim"
+                            )
+                            .setStyle(
+                                ButtonStyle.Secondary
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_adduser"
+                            )
+                            .setLabel(
+                                "Add User"
+                            )
+                            .setStyle(
+                                ButtonStyle.Secondary
+                            ),
+
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_removeuser"
+                            )
+                            .setLabel(
+                                "Remove User"
+                            )
+                            .setStyle(
+                                ButtonStyle.Secondary
+                            )
+                    ),
+                new ActionRowBuilder()
+                    .addComponents(
+                        new ButtonBuilder()
+                            .setCustomId(
+                                "ticket_close"
+                            )
+                            .setLabel(
+                                "Close Ticket"
+                            )
+                            .setStyle(
+                                ButtonStyle.Danger
+                            )
+                    )
+            ],
+            ephemeral: true
+        });
+    }
+
+    /* =====================================================
+       RENAME
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_rename"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to rename tickets.",
+                ephemeral: true
+            });
+        }
+
+        const modal =
+            new ModalBuilder()
+                .setCustomId(
+                    "modal_ticket_rename"
+                )
+                .setTitle(
+                    "Rename Ticket"
+                );
+
+        const input =
+            new TextInputBuilder()
+                .setCustomId(
+                    "ticket_name"
+                )
+                .setLabel(
+                    "New Ticket Name"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(true)
+                .setMaxLength(90)
+                .setValue(
+                    interaction.channel.name
+                );
+
+        modal.addComponents(
+            new ActionRowBuilder()
+                .addComponents(
+                    input
+                )
+        );
+
+        return interaction.showModal(
+            modal
+        );
+    }
+
+    /* =====================================================
+       ADD USER
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_adduser"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to manage ticket members.",
+                ephemeral: true
+            });
+        }
+
+        const modal =
+            new ModalBuilder()
+                .setCustomId(
+                    "modal_ticket_adduser"
+                )
+                .setTitle(
+                    "Add User"
+                );
+
+        const input =
+            new TextInputBuilder()
+                .setCustomId(
+                    "user_id"
+                )
+                .setLabel(
+                    "Discord User ID"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(true)
+                .setMaxLength(25);
+
+        modal.addComponents(
+            new ActionRowBuilder()
+                .addComponents(
+                    input
+                )
+        );
+
+        return interaction.showModal(
+            modal
+        );
+    }
+
+    /* =====================================================
+       REMOVE USER
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "ticket_removeuser"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to manage ticket members.",
+                ephemeral: true
+            });
+        }
+
+        const modal =
+            new ModalBuilder()
+                .setCustomId(
+                    "modal_ticket_removeuser"
+                )
+                .setTitle(
+                    "Remove User"
+                );
+
+        const input =
+            new TextInputBuilder()
+                .setCustomId(
+                    "user_id"
+                )
+                .setLabel(
+                    "Discord User ID"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(true)
+                .setMaxLength(25);
+
+        modal.addComponents(
+            new ActionRowBuilder()
+                .addComponents(
+                    input
+                )
+        );
+
+        return interaction.showModal(
+            modal
+        );
+    }
+
+    /* =====================================================
+       EMBED BUTTONS
+    ===================================================== */
+
+    if (
+        !interaction.customId.startsWith(
+            "embed_"
+        )
+    ) {
+        return;
+    }
+
+    const session =
+        embedSessions.get(
+            interaction.user.id
+        );
+
+    if (!session) {
+        return interaction.reply({
+            content:
+                "Your embed session has expired. Run `/embed` again.",
+            ephemeral: true
+        });
+    }
+
+    if (
+        interaction.customId ===
+        "embed_title"
+    ) {
+        return showSingleModal(
+            interaction,
+            "modal_title",
+            "Embed Title",
+            "title",
+            "Title",
+            TextInputStyle.Short,
+            session.title
+        );
+    }
+
+    if (
+        interaction.customId ===
+        "embed_description"
+    ) {
+        return showSingleModal(
+            interaction,
+            "modal_description",
+            "Embed Description",
+            "description",
+            "Description",
+            TextInputStyle.Paragraph,
+            session.description
+        );
+    }
+
+    if (
+        interaction.customId ===
+        "embed_extra"
+    ) {
+
+        const modal =
+            new ModalBuilder()
+                .setCustomId(
+                    "modal_extra"
+                )
+                .setTitle(
+                    "Images and Footer"
+                );
+
+        const footer =
+            new TextInputBuilder()
+                .setCustomId(
+                    "footer"
+                )
+                .setLabel(
+                    "Footer"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(false)
+                .setValue(
+                    session.footer ||
+                        ""
+                );
+
+        const image =
+            new TextInputBuilder()
+                .setCustomId(
+                    "image"
+                )
+                .setLabel(
+                    "Image URL"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(false)
+                .setValue(
+                    session.image ||
+                        ""
+                );
+
+        const thumbnail =
+            new TextInputBuilder()
+                .setCustomId(
+                    "thumbnail"
+                )
+                .setLabel(
+                    "Thumbnail URL"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(false)
+                .setValue(
+                    session.thumbnail ||
+                        ""
+                );
+
+        modal.addComponents(
+            new ActionRowBuilder()
+                .addComponents(
+                    footer
                 ),
-                new ActionRowBuilder().addComponents(
-                    new ButtonBuilder()
-                        .setCustomId("ticket_close")
-                        .setLabel("Close Ticket")
-                        .setStyle(ButtonStyle.Danger)
+            new ActionRowBuilder()
+                .addComponents(
+                    image
+                ),
+            new ActionRowBuilder()
+                .addComponents(
+                    thumbnail
+                )
+        );
+
+        return interaction.showModal(
+            modal
+        );
+    }
+
+    if (
+        interaction.customId ===
+        "embed_field"
+    ) {
+
+        if (
+            session.fields.length >=
+            25
+        ) {
+            return interaction.reply({
+                content:
+                    "Discord allows a maximum of 25 embed fields.",
+                ephemeral: true
+            });
+        }
+
+        const modal =
+            new ModalBuilder()
+                .setCustomId(
+                    "modal_field"
+                )
+                .setTitle(
+                    "Add Embed Field"
+                );
+
+        const name =
+            new TextInputBuilder()
+                .setCustomId(
+                    "name"
+                )
+                .setLabel(
+                    "Field Name"
+                )
+                .setStyle(
+                    TextInputStyle.Short
+                )
+                .setRequired(true)
+                .setMaxLength(256);
+
+        const value =
+            new TextInputBuilder()
+                .setCustomId(
+                    "value"
+                )
+                .setLabel(
+                    "Field Value"
+                )
+                .setStyle(
+                    TextInputStyle.Paragraph
+                )
+                .setRequired(true)
+                .setMaxLength(1024);
+
+        modal.addComponents(
+            new ActionRowBuilder()
+                .addComponents(
+                    name
+                ),
+            new ActionRowBuilder()
+                .addComponents(
+                    value
+                )
+        );
+
+        return interaction.showModal(
+            modal
+        );
+    }
+
+    if (
+        interaction.customId ===
+        "embed_preview"
+    ) {
+        return interaction.reply({
+            embeds: [
+                buildCreatorEmbed(
+                    session
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* RENAME */
+    if (
+        interaction.customId ===
+        "embed_send"
+    ) {
 
-    if (i.customId === "ticket_rename") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot rename tickets.",
-                ephemeral: true
-            });
-        }
-
-        const modal = new ModalBuilder()
-            .setCustomId("rename_modal")
-            .setTitle("Rename Ticket");
-
-        const input = new TextInputBuilder()
-            .setCustomId("name")
-            .setLabel("New ticket name")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(90);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(input)
-        );
-
-        return i.showModal(modal);
-    }
-
-    /* ADD USER */
-
-    if (i.customId === "ticket_add") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot manage ticket users.",
-                ephemeral: true
-            });
-        }
-
-        const modal = new ModalBuilder()
-            .setCustomId("add_user_modal")
-            .setTitle("Add User");
-
-        const input = new TextInputBuilder()
-            .setCustomId("id")
-            .setLabel("Discord User ID")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(input)
-        );
-
-        return i.showModal(modal);
-    }
-
-    /* REMOVE USER */
-
-    if (i.customId === "ticket_remove") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot manage ticket users.",
-                ephemeral: true
-            });
-        }
-
-        const modal = new ModalBuilder()
-            .setCustomId("remove_user_modal")
-            .setTitle("Remove User");
-
-        const input = new TextInputBuilder()
-            .setCustomId("id")
-            .setLabel("Discord User ID")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(input)
-        );
-
-        return i.showModal(modal);
-    }
-
-    /* ENROL APPROVE */
-
-    if (i.customId.startsWith("enrol_approve_")) {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageGuild)) {
-            return i.reply({
-                content: "You need the Manage Server permission.",
-                ephemeral: true
-            });
-        }
-
-        const userId = i.customId.split("_")[2];
-        const config = configs[i.guild.id]?.enrol;
-
-        const member =
-            await i.guild.members.fetch(userId).catch(() => null);
-
-        if (!member) {
-            return i.reply({
-                content: "That member is no longer in the server.",
-                ephemeral: true
-            });
-        }
-
-        await member.roles.add(config.role).catch(() => {});
-
-        const key = `${i.guild.id}:${userId}`;
-
-        if (enrolments[key]) {
-            enrolments[key].status = "Approved";
-        }
-
-        save(ENROL_FILE, enrolments);
-
-        return i.update({
+        await interaction.channel.send({
             embeds: [
-                createEmbed({
-                    title: "Enrolment Approved",
-                    description:
-                        `${member} has been approved and received the enrolment role.`
-                })
-            ],
-            components: []
-        });
-    }
-
-    /* ENROL REJECT */
-
-    if (i.customId.startsWith("enrol_reject_")) {
-        if (!hasPermission(i, PermissionsBitField.Flags.ManageGuild)) {
-            return i.reply({
-                content: "You need the Manage Server permission.",
-                ephemeral: true
-            });
-        }
-
-        const userId = i.customId.split("_")[2];
-        const key = `${i.guild.id}:${userId}`;
-
-        if (enrolments[key]) {
-            enrolments[key].status = "Rejected";
-        }
-
-        save(ENROL_FILE, enrolments);
-
-        return i.update({
-            embeds: [
-                createEmbed({
-                    title: "Enrolment Rejected",
-                    description:
-                        `<@${userId}>'s RSA enrolment application has been rejected.`
-                })
-            ],
-            components: []
-        });
-    }
-
-    /* EMBED TITLE */
-
-    if (i.customId === "embed_title") {
-        const modal = new ModalBuilder()
-            .setCustomId("embed_title_modal")
-            .setTitle("Embed Title");
-
-        const input = new TextInputBuilder()
-            .setCustomId("title")
-            .setLabel("Title")
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(256);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(input)
-        );
-
-        return i.showModal(modal);
-    }
-
-    /* EMBED DESCRIPTION */
-
-    if (i.customId === "embed_description") {
-        const modal = new ModalBuilder()
-            .setCustomId("embed_description_modal")
-            .setTitle("Embed Description");
-
-        const input = new TextInputBuilder()
-            .setCustomId("description")
-            .setLabel("Description")
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(true)
-            .setMaxLength(4000);
-
-        modal.addComponents(
-            new ActionRowBuilder().addComponents(input)
-        );
-
-        return i.showModal(modal);
-    }
-
-    /* EMBED SEND */
-
-    if (i.customId === "embed_send") {
-        const session = embedSessions.get(i.user.id);
-
-        if (!session) {
-            return i.reply({
-                content: "Your embed session has expired.",
-                ephemeral: true
-            });
-        }
-
-        await i.channel.send({
-            embeds: [
-                createEmbed({
-                    title: session.title,
-                    description: session.description,
-                    footer: session.footer
-                })
+                buildCreatorEmbed(
+                    session
+                )
             ]
         });
 
-        embedSessions.delete(i.user.id);
+        embedSessions.delete(
+            interaction.user.id
+        );
 
-        return i.update({
-            content: "Embed sent successfully.",
+        return interaction.update({
+            content:
+                "Embed sent successfully.",
             embeds: [],
             components: []
         });
     }
 
-    /* EMBED CANCEL */
+    if (
+        interaction.customId ===
+        "embed_cancel"
+    ) {
 
-    if (i.customId === "embed_cancel") {
-        embedSessions.delete(i.user.id);
+        embedSessions.delete(
+            interaction.user.id
+        );
 
-        return i.update({
-            content: "Embed creation cancelled.",
+        return interaction.update({
+            content:
+                "Embed creation cancelled.",
             embeds: [],
             components: []
         });
     }
+}
+
+/* =========================================================
+   TICKET HELPERS
+========================================================= */
+
+function getTicketOwner(
+    channel
+) {
+    if (!channel?.topic) {
+        return null;
+    }
+
+    const match =
+        channel.topic.match(
+            /ticket-owner:(\d+)/
+        );
+
+    return match
+        ? match[1]
+        : null;
+}
+
+/* =========================================================
+   CLOSE TICKET
+========================================================= */
+
+async function closeTicket(
+    interaction
+) {
+
+    const channel =
+        interaction.channel;
+
+    const ownerId =
+        getTicketOwner(
+            channel
+        );
+
+    await interaction.reply({
+        embeds: [
+            createEmbed({
+                title:
+                    "Ticket Closing",
+                description:
+                    "This ticket is being closed and a transcript will be saved.",
+                footer:
+                    "RSA Utility"
+            })
+        ]
+    });
+
+    const messages = [];
+
+    try {
+
+        let before;
+
+        while (
+            messages.length <
+            1000
+        ) {
+
+            const fetched =
+                await channel.messages.fetch({
+                    limit: 100,
+                    ...(before
+                        ? { before }
+                        : {})
+                });
+
+            if (!fetched.size) {
+                break;
+            }
+
+            messages.push(
+                ...fetched.values()
+            );
+
+            before =
+                fetched.last().id;
+
+            if (
+                fetched.size <
+                100
+            ) {
+                break;
+            }
+        }
+
+    } catch (error) {
+
+        console.error(
+            "Transcript error:",
+            error
+        );
+    }
+
+    messages.sort(
+        (a, b) =>
+            a.createdTimestamp -
+            b.createdTimestamp
+    );
+
+    let transcript =
+        `${BOT_NAME} Ticket Transcript\n`;
+
+    transcript +=
+        `Server: ${interaction.guild.name}\n`;
+
+    transcript +=
+        `Channel: #${channel.name}\n`;
+
+    transcript +=
+        `Ticket Owner: ${ownerId || "Unknown"}\n`;
+
+    transcript +=
+        `Closed By: ${interaction.user.tag}\n`;
+
+    transcript +=
+        `Closed At: ${new Date().toISOString()}\n`;
+
+    transcript +=
+        `\n========================================\n\n`;
+
+    for (
+        const message of messages
+    ) {
+
+        const timestamp =
+            new Date(
+                message.createdTimestamp
+            ).toISOString();
+
+        const author =
+            message.author?.tag ||
+            "Unknown";
+
+        let content =
+            message.content ||
+            "[No text content]";
+
+        if (
+            message.attachments.size
+        ) {
+
+            content +=
+                ` | Attachments: ${[
+                    ...message.attachments.values()
+                ]
+                    .map(
+                        attachment =>
+                            attachment.url
+                    )
+                    .join(", ")}`;
+        }
+
+        transcript +=
+            `[${timestamp}] ${author}: ${content}\n`;
+    }
+
+    const attachment =
+        new AttachmentBuilder(
+            Buffer.from(
+                transcript,
+                "utf8"
+            ),
+            {
+                name:
+                    `${channel.name}-transcript.txt`
+            }
+        );
+
+    await sendTicketLog(
+        interaction.guild,
+        createEmbed({
+            title:
+                "Ticket Closed",
+            description:
+                "A ticket has been closed.",
+            fields: [
+                {
+                    name:
+                        "Ticket",
+                    value:
+                        `#${channel.name}`
+                },
+                {
+                    name:
+                        "Owner",
+                    value:
+                        ownerId
+                            ? `<@${ownerId}>`
+                            : "Unknown"
+                },
+                {
+                    name:
+                        "Closed By",
+                    value:
+                        interaction.user.toString()
+                }
+            ],
+            footer:
+                "RSA Utility"
+        }),
+        attachment
+    );
+
+    setTimeout(
+        async () => {
+
+            await channel.delete(
+                `Ticket closed by ${interaction.user.tag}`
+            ).catch(() => {});
+
+        },
+        1500
+    );
 }
 
 /* =========================================================
    MODALS
 ========================================================= */
 
-async function modalHandler(i) {
+async function showSingleModal(
+    interaction,
+    customId,
+    modalTitle,
+    inputId,
+    label,
+    style,
+    value
+) {
 
-    /* ENROL */
+    const modal =
+        new ModalBuilder()
+            .setCustomId(
+                customId
+            )
+            .setTitle(
+                modalTitle
+            );
 
-    if (i.customId === "enrol_modal") {
-        const config = configs[i.guild.id]?.enrol;
+    const maxLength =
+        style ===
+            TextInputStyle.Paragraph
+            ? 4000
+            : 256;
 
-        const roblox =
-            i.fields.getTextInputValue("roblox");
+    const input =
+        new TextInputBuilder()
+            .setCustomId(
+                inputId
+            )
+            .setLabel(
+                label
+            )
+            .setStyle(
+                style
+            )
+            .setRequired(false)
+            .setMaxLength(
+                maxLength
+            );
 
-        const reason =
-            i.fields.getTextInputValue("reason");
-
-        const organisation =
-            i.fields.getTextInputValue("organisation") ||
-            "Not provided";
-
-        const position =
-            i.fields.getTextInputValue("position") ||
-            "Not provided";
-
-        const key = `${i.guild.id}:${i.user.id}`;
-
-        enrolments[key] = {
-            user: i.user.id,
-            roblox,
-            reason,
-            organisation,
-            position,
-            status: "Pending",
-            submitted: Date.now()
-        };
-
-        save(ENROL_FILE, enrolments);
-
-        const channel =
-            i.guild.channels.cache.get(config.channel);
-
-        if (channel) {
-            await channel.send({
-                embeds: [
-                    createEmbed({
-                        title: "New RSA Enrolment",
-                        description:
-                            `A new enrolment application has been submitted by ${i.user}.`,
-                        fields: [
-                            {
-                                name: "Roblox Username",
-                                value: roblox
-                            },
-                            {
-                                name: "School / Organisation",
-                                value: organisation
-                            },
-                            {
-                                name: "Position / Role",
-                                value: position
-                            },
-                            {
-                                name: "Reason",
-                                value: reason
-                            },
-                            {
-                                name: "Status",
-                                value: "Pending Review"
-                            }
-                        ]
-                    })
-                ],
-                components: [
-                    new ActionRowBuilder().addComponents(
-                        new ButtonBuilder()
-                            .setCustomId(
-                                `enrol_approve_${i.user.id}`
-                            )
-                            .setLabel("Approve")
-                            .setStyle(ButtonStyle.Success),
-                        new ButtonBuilder()
-                            .setCustomId(
-                                `enrol_reject_${i.user.id}`
-                            )
-                            .setLabel("Reject")
-                            .setStyle(ButtonStyle.Danger)
-                    )
-                ]
-            });
-        }
-
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "Application Submitted",
-                    description:
-                        "Your RSA enrolment application has been submitted for review."
-                })
-            ],
-            ephemeral: true
-        });
+    if (value) {
+        input.setValue(
+            value.slice(
+                0,
+                maxLength
+            )
+        );
     }
 
-    /* RENAME */
+    modal.addComponents(
+        new ActionRowBuilder()
+            .addComponents(
+                input
+            )
+    );
 
-    if (i.customId === "rename_modal") {
-        if (!ticketStaff(i)) {
-            return i.reply({
-                content: "You cannot rename this ticket.",
+    return interaction.showModal(
+        modal
+    );
+}
+
+/* =========================================================
+   MODAL HANDLER
+========================================================= */
+
+async function handleModal(
+    interaction
+) {
+
+    /* =====================================================
+       RENAME
+    ===================================================== */
+
+    if (
+        interaction.customId ===
+        "modal_ticket_rename"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to rename tickets.",
                 ephemeral: true
             });
         }
 
-        const name = i.fields
-            .getTextInputValue("name")
-            .toLowerCase()
-            .replace(/[^a-z0-9-_]/g, "-")
-            .slice(0, 90);
+        let name =
+            interaction.fields
+                .getTextInputValue(
+                    "ticket_name"
+                )
+                .toLowerCase()
+                .replace(
+                    /[^a-z0-9-_]/g,
+                    "-"
+                )
+                .replace(
+                    /-+/g,
+                    "-"
+                )
+                .replace(
+                    /^-|-$/g,
+                    ""
+                )
+                .slice(
+                    0,
+                    90
+                );
 
-        await i.channel.setName(name);
+        if (!name) {
+            name = "ticket";
+        }
 
-        return i.reply({
+        await interaction.channel.setName(
+            name
+        );
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "Ticket Renamed",
+                    title:
+                        "Ticket Renamed",
                     description:
-                        `The ticket has been renamed to **${name}**.`
+                        `The ticket has been renamed to **${name}**.`,
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* ADD USER */
+    /* =====================================================
+       ADD USER
+    ===================================================== */
 
-    if (i.customId === "add_user_modal") {
-        const id = i.fields.getTextInputValue("id").trim();
+    if (
+        interaction.customId ===
+        "modal_ticket_adduser"
+    ) {
+
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to manage ticket members.",
+                ephemeral: true
+            });
+        }
+
+        const userId =
+            interaction.fields
+                .getTextInputValue(
+                    "user_id"
+                )
+                .trim();
 
         const member =
-            await i.guild.members.fetch(id).catch(() => null);
+            await interaction.guild.members
+                .fetch(userId)
+                .catch(() => null);
 
         if (!member) {
-            return i.reply({
-                content: "Member not found.",
+            return interaction.reply({
+                content:
+                    "I could not find that member in this server.",
                 ephemeral: true
             });
         }
 
-        await i.channel.permissionOverwrites.edit(member.id, {
-            ViewChannel: true,
-            SendMessages: true,
-            ReadMessageHistory: true
-        });
+        await interaction.channel.permissionOverwrites.edit(
+            member.id,
+            {
+                ViewChannel: true,
+                SendMessages: true,
+                ReadMessageHistory: true
+            }
+        );
 
-        return i.reply({
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "User Added",
+                    title:
+                        "User Added",
                     description:
-                        `${member} has been added to this ticket.`
+                        `${member} has been added to this ticket.`,
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* REMOVE USER */
+    /* =====================================================
+       REMOVE USER
+    ===================================================== */
 
-    if (i.customId === "remove_user_modal") {
-        const id = i.fields.getTextInputValue("id").trim();
+    if (
+        interaction.customId ===
+        "modal_ticket_removeuser"
+    ) {
 
-        const owner =
-            i.channel.topic?.match(
-                /ticket-owner:(\d+)/
-            )?.[1];
-
-        if (id === owner) {
-            return i.reply({
-                content: "The ticket owner cannot be removed.",
+        if (
+            !isTicketStaff(
+                interaction
+            )
+        ) {
+            return interaction.reply({
+                content:
+                    "You do not have permission to manage ticket members.",
                 ephemeral: true
             });
         }
+
+        const userId =
+            interaction.fields
+                .getTextInputValue(
+                    "user_id"
+                )
+                .trim();
 
         const member =
-            await i.guild.members.fetch(id).catch(() => null);
+            await interaction.guild.members
+                .fetch(userId)
+                .catch(() => null);
 
         if (!member) {
-            return i.reply({
-                content: "Member not found.",
+            return interaction.reply({
+                content:
+                    "I could not find that member.",
                 ephemeral: true
             });
         }
 
-        await i.channel.permissionOverwrites.delete(member.id);
+        const ownerId =
+            getTicketOwner(
+                interaction.channel
+            );
 
-        return i.reply({
+        if (
+            ownerId ===
+            member.id
+        ) {
+            return interaction.reply({
+                content:
+                    "The ticket owner cannot be removed from their own ticket.",
+                ephemeral: true
+            });
+        }
+
+        await interaction.channel.permissionOverwrites.delete(
+            member.id
+        ).catch(() => {});
+
+        return interaction.reply({
             embeds: [
                 createEmbed({
-                    title: "User Removed",
+                    title:
+                        "User Removed",
                     description:
-                        `${member} has been removed from this ticket.`
+                        `${member} has been removed from this ticket.`,
+                    footer:
+                        "RSA Utility"
                 })
             ],
             ephemeral: true
         });
     }
 
-    /* EMBED TITLE */
+    /* =====================================================
+       EMBED MODALS
+    ===================================================== */
 
-    if (i.customId === "embed_title_modal") {
-        const session = embedSessions.get(i.user.id);
+    const session =
+        embedSessions.get(
+            interaction.user.id
+        );
 
-        if (!session) {
-            return i.reply({
-                content: "Your embed session has expired.",
-                ephemeral: true
-            });
-        }
+    if (!session) {
+        return interaction.reply({
+            content:
+                "Your embed session has expired. Run `/embed` again.",
+            ephemeral: true
+        });
+    }
 
+    if (
+        interaction.customId ===
+        "modal_title"
+    ) {
         session.title =
-            i.fields.getTextInputValue("title");
-
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "Embed Updated",
-                    description: "The embed title has been updated."
-                })
-            ],
-            ephemeral: true
-        });
+            interaction.fields
+                .getTextInputValue(
+                    "title"
+                );
     }
 
-    /* EMBED DESCRIPTION */
+    else if (
+        interaction.customId ===
+        "modal_description"
+    ) {
+        session.description =
+            interaction.fields
+                .getTextInputValue(
+                    "description"
+                );
+    }
 
-    if (i.customId === "embed_description_modal") {
-        const session = embedSessions.get(i.user.id);
+    else if (
+        interaction.customId ===
+        "modal_extra"
+    ) {
+        session.footer =
+            interaction.fields
+                .getTextInputValue(
+                    "footer"
+                );
 
-        if (!session) {
-            return i.reply({
-                content: "Your embed session has expired.",
+        session.image =
+            interaction.fields
+                .getTextInputValue(
+                    "image"
+                );
+
+        session.thumbnail =
+            interaction.fields
+                .getTextInputValue(
+                    "thumbnail"
+                );
+    }
+
+    else if (
+        interaction.customId ===
+        "modal_field"
+    ) {
+
+        if (
+            session.fields.length >=
+            25
+        ) {
+            return interaction.reply({
+                content:
+                    "Discord allows a maximum of 25 fields.",
                 ephemeral: true
             });
         }
 
-        session.description =
-            i.fields.getTextInputValue("description");
+        const name =
+            interaction.fields
+                .getTextInputValue(
+                    "name"
+                );
 
-        return i.reply({
-            embeds: [
-                createEmbed({
-                    title: "Embed Updated",
-                    description:
-                        "The embed description has been updated."
-                })
-            ],
-            ephemeral: true
+        const value =
+            interaction.fields
+                .getTextInputValue(
+                    "value"
+                );
+
+        session.fields.push({
+            name,
+            value,
+            inline: false
         });
     }
+
+    else {
+        return;
+    }
+
+    await interaction.reply({
+        embeds: [
+            createEmbed({
+                title:
+                    "Embed Updated",
+                description:
+                    "Your embed has been updated.",
+                footer:
+                    "RSA Utility"
+            })
+        ],
+        ephemeral: true
+    });
 }
 
 /* =========================================================
    ERROR HANDLING
 ========================================================= */
 
-client.on("error", error => {
-    console.error("Discord client error:", error);
-});
+client.on(
+    "error",
+    error => {
+        console.error(
+            "Discord client error:",
+            error
+        );
+    }
+);
 
-process.on("unhandledRejection", error => {
-    console.error("Unhandled rejection:", error);
-});
+process.on(
+    "unhandledRejection",
+    error => {
+        console.error(
+            "Unhandled promise rejection:",
+            error
+        );
+    }
+);
 
-process.on("uncaughtException", error => {
-    console.error("Uncaught exception:", error);
-});
+process.on(
+    "uncaughtException",
+    error => {
+        console.error(
+            "Uncaught exception:",
+            error
+        );
+    }
+);
 
 /* =========================================================
    LOGIN
 ========================================================= */
 
-client.login(TOKEN);
+client.login(
+    TOKEN
+);
