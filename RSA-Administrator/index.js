@@ -51,7 +51,9 @@ const client = new Client({
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent
     ],
-    partials: [Partials.Channel]
+    partials: [
+        Partials.Channel
+    ]
 });
 
 // ============================================================
@@ -61,27 +63,48 @@ const client = new Client({
 const dataFolder = path.join(__dirname, "data");
 
 if (!fs.existsSync(dataFolder)) {
-    fs.mkdirSync(dataFolder, { recursive: true });
+    fs.mkdirSync(dataFolder, {
+        recursive: true
+    });
 }
 
-const warningsFile = path.join(dataFolder, "warnings.json");
-const configFile = path.join(dataFolder, "config.json");
+const warningsFile = path.join(
+    dataFolder,
+    "warnings.json"
+);
 
-function loadJSON(file, fallback = {}) {
+const configFile = path.join(
+    dataFolder,
+    "config.json"
+);
+
+function loadJSON(file, fallback) {
     try {
         if (!fs.existsSync(file)) {
             fs.writeFileSync(
                 file,
-                JSON.stringify(fallback, null, 2)
+                JSON.stringify(
+                    fallback,
+                    null,
+                    2
+                )
             );
+
             return fallback;
         }
 
         return JSON.parse(
-            fs.readFileSync(file, "utf8")
+            fs.readFileSync(
+                file,
+                "utf8"
+            )
         );
     } catch (error) {
-        console.error(`Could not load ${file}:`, error);
+        console.error(
+            `Failed loading ${file}:`,
+            error
+        );
+
         return fallback;
     }
 }
@@ -90,18 +113,36 @@ function saveJSON(file, data) {
     try {
         fs.writeFileSync(
             file,
-            JSON.stringify(data, null, 2)
+            JSON.stringify(
+                data,
+                null,
+                2
+            )
         );
     } catch (error) {
-        console.error(`Could not save ${file}:`, error);
+        console.error(
+            `Failed saving ${file}:`,
+            error
+        );
     }
 }
 
-let warnings = loadJSON(warningsFile, {});
-let config = loadJSON(configFile, {});
+let warnings = loadJSON(
+    warningsFile,
+    {}
+);
 
-// Temporary submissions
+let config = loadJSON(
+    configFile,
+    {}
+);
+
+// ============================================================
+// TEMPORARY DATA
+// ============================================================
+
 const submissions = new Map();
+const embedBuilders = new Map();
 
 // ============================================================
 // HELPERS
@@ -115,15 +156,33 @@ function getGuildConfig(guildId) {
     return config[guildId];
 }
 
-function createEmbed(title, description = "") {
+function saveConfig() {
+    saveJSON(
+        configFile,
+        config
+    );
+}
+
+function createEmbed(
+    title,
+    description
+) {
     return new EmbedBuilder()
         .setColor(BRAND_COLOUR)
-        .setTitle(`${LOGO} ${title}`)
-        .setDescription(description || null)
+        .setTitle(
+            `${LOGO} ${title}`
+        )
+        .setDescription(
+            description || null
+        )
         .setTimestamp();
 }
 
 function canManage(member) {
+    if (!member) {
+        return false;
+    }
+
     return (
         member.permissions.has(
             PermissionFlagsBits.ManageGuild
@@ -135,7 +194,9 @@ function canManage(member) {
 }
 
 function isStaff(member) {
-    if (!member) return false;
+    if (!member) {
+        return false;
+    }
 
     if (
         member.permissions.has(
@@ -145,251 +206,335 @@ function isStaff(member) {
         return true;
     }
 
-    const cfg = getGuildConfig(member.guild.id);
+    const guildConfig =
+        getGuildConfig(
+            member.guild.id
+        );
 
-    return cfg.staffRoleId
-        ? member.roles.cache.has(cfg.staffRoleId)
-        : false;
-}
-
-function safeName(name, fallback = "server") {
-    const result = String(name)
-        .toLowerCase()
-        .replace(/[^a-z0-9]+/g, "-")
-        .replace(/^-|-$/g, "")
-        .substring(0, 60);
-
-    return result || fallback;
-}
-
-function extractInviteCode(invite) {
-    if (!invite) return null;
-
-    const value = invite.trim();
-
-    const match = value.match(
-        /(?:discord\.gg\/|discord(?:app)?\.com\/invite\/)([A-Za-z0-9-]+)/
-    );
-
-    return match ? match[1] : null;
-}
-
-function normaliseInvite(invite) {
-    const code = extractInviteCode(invite);
-
-    if (!code) return null;
-
-    return `https://discord.gg/${code}`;
-}
-
-async function getBotWebhook(channel, name) {
     if (
-        !channel ||
-        channel.type !== ChannelType.GuildText
+        guildConfig.staffRoleId &&
+        member.roles.cache.has(
+            guildConfig.staffRoleId
+        )
     ) {
-        return null;
+        return true;
     }
 
-    const webhooks =
-        await channel.fetchWebhooks();
-
-    let webhook = webhooks.find(
-        hook =>
-            hook.owner?.id === client.user.id
-    );
-
-    if (!webhook) {
-        webhook = await channel.createWebhook({
-            name
-        });
+    if (
+        guildConfig.submitStaffRoleId &&
+        member.roles.cache.has(
+            guildConfig.submitStaffRoleId
+        )
+    ) {
+        return true;
     }
 
-    return webhook;
+    if (
+        guildConfig.ticketStaffRoleId &&
+        member.roles.cache.has(
+            guildConfig.ticketStaffRoleId
+        )
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+function safeChannelName(name) {
+    return String(name)
+        .toLowerCase()
+        .replace(
+            /[^a-z0-9]+/g,
+            "-"
+        )
+        .replace(
+            /^-|-$/g,
+            ""
+        )
+        .substring(
+            0,
+            60
+        ) || "server";
+}
+
+function makeId() {
+    return `${Date.now()}-${Math.random()
+        .toString(36)
+        .substring(2, 8)}`;
 }
 
 // ============================================================
-// COMMANDS
+// SLASH COMMANDS
 // ============================================================
 
 const commands = [
 
+    // --------------------------------------------------------
     // GENERAL
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("help")
-        .setDescription("Shows all available commands"),
+        .setDescription(
+            "Shows all available commands"
+        ),
 
     new SlashCommandBuilder()
         .setName("ping")
-        .setDescription("Checks the bot latency"),
+        .setDescription(
+            "Checks the bot latency"
+        ),
 
     new SlashCommandBuilder()
         .setName("botinfo")
-        .setDescription("Shows bot information"),
+        .setDescription(
+            "Shows information about the bot"
+        ),
 
     new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("Shows server information"),
+        .setDescription(
+            "Shows information about this server"
+        ),
 
     new SlashCommandBuilder()
         .setName("userinfo")
-        .setDescription("Shows information about a user")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("User")
+        .setDescription(
+            "Shows information about a user"
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "User to view"
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("profile")
-        .setDescription("Shows your profile"),
+        .setDescription(
+            "Shows your profile"
+        ),
 
+    // --------------------------------------------------------
     // MODERATION
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("ban")
-        .setDescription("Ban a member")
+        .setDescription(
+            "Bans a member"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.BanMembers
         )
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to ban"
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason"
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("kick")
-        .setDescription("Kick a member")
+        .setDescription(
+            "Kicks a member"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.KickMembers
         )
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to kick"
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason"
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("timeout")
-        .setDescription("Timeout a member")
+        .setDescription(
+            "Times out a member"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ModerateMembers
         )
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member to timeout"
+                )
                 .setRequired(true)
         )
-        .addIntegerOption(o =>
-            o.setName("minutes")
-                .setDescription("Minutes")
+        .addIntegerOption(option =>
+            option
+                .setName("minutes")
+                .setDescription(
+                    "Duration in minutes"
+                )
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(40320)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason"
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("untimeout")
-        .setDescription("Remove a timeout")
+        .setDescription(
+            "Removes a timeout"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ModerateMembers
         )
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warn")
-        .setDescription("Warn a member")
+        .setDescription(
+            "Warns a member"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ModerateMembers
         )
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member"
+                )
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription(
+                    "Reason"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
-        .setDescription("View warnings")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .setDescription(
+            "Shows a member's warnings"
+        )
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member"
+                )
                 .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("clearwarnings")
-        .setDescription("Clear warnings")
+        .setDescription(
+            "Clears a member's warnings"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ModerateMembers
         )
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("Member")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription(
+                    "Member"
+                )
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("purge")
-        .setDescription("Delete messages")
+        .setDescription(
+            "Deletes messages"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageMessages
         )
-        .addIntegerOption(o =>
-            o.setName("amount")
-                .setDescription("Amount")
+        .addIntegerOption(option =>
+            option
+                .setName("amount")
+                .setDescription(
+                    "Amount"
+                )
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(100)
         ),
 
+    // --------------------------------------------------------
     // MANAGEMENT
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("lock")
-        .setDescription("Lock the current channel")
+        .setDescription(
+            "Locks the current channel"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageChannels
         ),
 
     new SlashCommandBuilder()
         .setName("unlock")
-        .setDescription("Unlock the current channel")
+        .setDescription(
+            "Unlocks the current channel"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageChannels
         ),
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Set channel slowmode")
+        .setDescription(
+            "Changes channel slowmode"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageChannels
         )
-        .addIntegerOption(o =>
-            o.setName("seconds")
-                .setDescription("Seconds")
+        .addIntegerOption(option =>
+            option
+                .setName("seconds")
+                .setDescription(
+                    "Slowmode seconds"
+                )
                 .setRequired(true)
                 .setMinValue(0)
                 .setMaxValue(21600)
@@ -397,98 +542,157 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("role")
-        .setDescription("Manage roles")
+        .setDescription(
+            "Manage member roles"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageRoles
         )
-        .addSubcommand(s =>
-            s.setName("add")
-                .setDescription("Add a role")
-                .addUserOption(o =>
-                    o.setName("user")
-                        .setDescription("Member")
+        .addSubcommand(sub =>
+            sub
+                .setName("add")
+                .setDescription(
+                    "Adds a role"
+                )
+                .addUserOption(option =>
+                    option
+                        .setName("user")
+                        .setDescription(
+                            "Member"
+                        )
                         .setRequired(true)
                 )
-                .addRoleOption(o =>
-                    o.setName("role")
-                        .setDescription("Role")
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription(
+                            "Role"
+                        )
                         .setRequired(true)
                 )
         )
-        .addSubcommand(s =>
-            s.setName("remove")
-                .setDescription("Remove a role")
-                .addUserOption(o =>
-                    o.setName("user")
-                        .setDescription("Member")
+        .addSubcommand(sub =>
+            sub
+                .setName("remove")
+                .setDescription(
+                    "Removes a role"
+                )
+                .addUserOption(option =>
+                    option
+                        .setName("user")
+                        .setDescription(
+                            "Member"
+                        )
                         .setRequired(true)
                 )
-                .addRoleOption(o =>
-                    o.setName("role")
-                        .setDescription("Role")
+                .addRoleOption(option =>
+                    option
+                        .setName("role")
+                        .setDescription(
+                            "Role"
+                        )
                         .setRequired(true)
                 )
         ),
 
     new SlashCommandBuilder()
         .setName("announce")
-        .setDescription("Send an announcement")
+        .setDescription(
+            "Creates an announcement"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageGuild
         )
-        .addStringOption(o =>
-            o.setName("message")
-                .setDescription("Announcement")
+        .addStringOption(option =>
+            option
+                .setName("message")
+                .setDescription(
+                    "Announcement"
+                )
                 .setRequired(true)
         ),
 
-    // WEBHOOK EMBED
+    // --------------------------------------------------------
+    // WEBHOOK EMBEDS
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("embed")
-        .setDescription("Create a webhook embed"),
+        .setDescription(
+            "Open the webhook embed builder"
+        )
+        .setDefaultMemberPermissions(
+            PermissionFlagsBits.ManageMessages
+        ),
 
+    // --------------------------------------------------------
     // TICKETS
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("ticketconfig")
-        .setDescription("Configure tickets")
+        .setDescription(
+            "Configure the ticket system"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageGuild
         ),
 
-    // SUBMISSIONS
+    // --------------------------------------------------------
+    // SERVER SUBMISSIONS
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("submitconfig")
-        .setDescription("Configure server submissions")
+        .setDescription(
+            "Configure server submissions"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageGuild
         ),
 
+    // --------------------------------------------------------
     // REPORTS
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("reportsetup")
-        .setDescription("Configure server reports")
+        .setDescription(
+            "Configure the server reporting system"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageGuild
         ),
 
+    // --------------------------------------------------------
     // VERIFICATION
+    // --------------------------------------------------------
+
     new SlashCommandBuilder()
         .setName("verification")
-        .setDescription("Configure the verification system")
+        .setDescription(
+            "Send the server verification panel"
+        )
         .setDefaultMemberPermissions(
             PermissionFlagsBits.ManageGuild
         )
 
-].map(command => command.toJSON());
+].map(command =>
+    command.toJSON()
+);
 
 // ============================================================
-// REGISTER
+// REGISTER COMMANDS
 // ============================================================
 
 async function registerCommands() {
+
     try {
-        const rest = new REST({ version: "10" })
-            .setToken(TOKEN);
+
+        const rest =
+            new REST({
+                version: "10"
+            }).setToken(TOKEN);
 
         await rest.put(
             Routes.applicationGuildCommands(
@@ -503,7 +707,9 @@ async function registerCommands() {
         console.log(
             `Registered ${commands.length} slash commands.`
         );
+
     } catch (error) {
+
         console.error(
             "Command registration error:",
             error
@@ -515,79 +721,155 @@ async function registerCommands() {
 // READY
 // ============================================================
 
-client.once("ready", async () => {
-    console.log(
-        `Logged in as ${client.user.tag}`
-    );
+client.once(
+    "ready",
+    async () => {
 
-    console.log(
-        `Serving ${client.guilds.cache.size} server(s).`
-    );
+        console.log(
+            `Logged in as ${client.user.tag}`
+        );
 
-    await registerCommands();
+        console.log(
+            `Serving ${client.guilds.cache.size} server(s).`
+        );
 
-    client.user.setActivity(
-        "server listings",
-        {
-            type: 3
+        await registerCommands();
+
+        client.user.setActivity(
+            "server listings",
+            {
+                type: 3
+            }
+        );
+    }
+);
+
+// ============================================================
+// WELCOMER
+// ============================================================
+
+client.on(
+    "guildMemberAdd",
+    async member => {
+
+        try {
+
+            const guildConfig =
+                getGuildConfig(
+                    member.guild.id
+                );
+
+            if (
+                !guildConfig.welcomeChannelId
+            ) {
+                return;
+            }
+
+            const channel =
+                member.guild.channels.cache.get(
+                    guildConfig.welcomeChannelId
+                );
+
+            if (
+                !channel ||
+                channel.type !==
+                    ChannelType.GuildText
+            ) {
+                return;
+            }
+
+            const message =
+                guildConfig.welcomeMessage ||
+                `Welcome ${member} to **${member.guild.name}**!`;
+
+            const embed =
+                createEmbed(
+                    "Welcome!",
+                    message
+                );
+
+            // IMPORTANT:
+            // No member avatar / thumbnail.
+            await channel.send({
+                content: `${member}`,
+                embeds: [embed]
+            });
+
+        } catch (error) {
+
+            console.error(
+                "WELCOME ERROR:",
+                error
+            );
         }
-    );
-});
+    }
+);
 
 // ============================================================
 // HELP
 // ============================================================
 
 function helpEmbed() {
-    return createEmbed(
-        "Commands",
-        "Here are the commands available."
-    ).addFields(
-        {
-            name: "General",
-            value:
-                "`/help`\n" +
-                "`/ping`\n" +
-                "`/botinfo`\n" +
-                "`/serverinfo`\n" +
-                "`/userinfo`\n" +
-                "`/profile`"
-        },
-        {
-            name: "Moderation",
-            value:
-                "`/ban`\n" +
-                "`/kick`\n" +
-                "`/timeout`\n" +
-                "`/untimeout`\n" +
-                "`/warn`\n" +
-                "`/warnings`\n" +
-                "`/clearwarnings`\n" +
-                "`/purge`"
-        },
-        {
-            name: "Management",
-            value:
-                "`/lock`\n" +
-                "`/unlock`\n" +
-                "`/slowmode`\n" +
-                "`/role`\n" +
-                "`/announce`\n" +
-                "`/embed`"
-        },
-        {
-            name: "Systems",
-            value:
-                "`/ticketconfig`\n" +
-                "`/submitconfig`\n" +
-                "`/reportsetup`\n" +
-                "`/verification`"
-        }
-    );
+
+    return new EmbedBuilder()
+        .setColor(BRAND_COLOUR)
+        .setTitle(
+            `${LOGO} Commands`
+        )
+        .setDescription(
+            "Here are the commands available."
+        )
+        .addFields(
+            {
+                name: "General",
+                value:
+                    "`/help`\n" +
+                    "`/ping`\n" +
+                    "`/botinfo`\n" +
+                    "`/serverinfo`\n" +
+                    "`/userinfo`\n" +
+                    "`/profile`",
+                inline: true
+            },
+            {
+                name: "Moderation",
+                value:
+                    "`/ban`\n" +
+                    "`/kick`\n" +
+                    "`/timeout`\n" +
+                    "`/untimeout`\n" +
+                    "`/warn`\n" +
+                    "`/warnings`\n" +
+                    "`/clearwarnings`\n" +
+                    "`/purge`",
+                inline: true
+            },
+            {
+                name: "Management",
+                value:
+                    "`/lock`\n" +
+                    "`/unlock`\n" +
+                    "`/slowmode`\n" +
+                    "`/role`\n" +
+                    "`/announce`\n" +
+                    "`/embed`",
+                inline: true
+            },
+            {
+                name: "Systems",
+                value:
+                    "`/ticketconfig`\n" +
+                    "`/submitconfig`\n" +
+                    "`/reportsetup`\n" +
+                    "`/verification`",
+                inline: true
+            }
+        )
+        .setTimestamp();
 }
 
 // ============================================================
-// COMMAND HANDLER
+// INTERACTIONS
 // ============================================================
 
 client.on(
@@ -596,25 +878,41 @@ client.on(
 
         try {
 
-            // ====================================================
+            // ==================================================
             // SLASH COMMANDS
-            // ====================================================
+            // ==================================================
 
-            if (interaction.isChatInputCommand()) {
+            if (
+                interaction.isChatInputCommand()
+            ) {
 
                 const command =
                     interaction.commandName;
 
+                // ----------------------------------------------
                 // HELP
-                if (command === "help") {
+                // ----------------------------------------------
+
+                if (
+                    command === "help"
+                ) {
+
                     return interaction.reply({
-                        embeds: [helpEmbed()],
+                        embeds: [
+                            helpEmbed()
+                        ],
                         ephemeral: true
                     });
                 }
 
+                // ----------------------------------------------
                 // PING
-                if (command === "ping") {
+                // ----------------------------------------------
+
+                if (
+                    command === "ping"
+                ) {
+
                     return interaction.reply({
                         content:
                             `Pong! ${client.ws.ping}ms`,
@@ -622,8 +920,14 @@ client.on(
                     });
                 }
 
+                // ----------------------------------------------
                 // BOT INFO
-                if (command === "botinfo") {
+                // ----------------------------------------------
+
+                if (
+                    command === "botinfo"
+                ) {
+
                     return interaction.reply({
                         embeds: [
                             createEmbed(
@@ -636,8 +940,13 @@ client.on(
                     });
                 }
 
+                // ----------------------------------------------
                 // SERVER INFO
-                if (command === "serverinfo") {
+                // ----------------------------------------------
+
+                if (
+                    command === "serverinfo"
+                ) {
 
                     const guild =
                         interaction.guild;
@@ -655,8 +964,13 @@ client.on(
                     });
                 }
 
+                // ----------------------------------------------
                 // USER INFO
-                if (command === "userinfo") {
+                // ----------------------------------------------
+
+                if (
+                    command === "userinfo"
+                ) {
 
                     const user =
                         interaction.options.getUser(
@@ -666,22 +980,33 @@ client.on(
 
                     const member =
                         await interaction.guild.members
-                            .fetch(user.id)
-                            .catch(() => null);
+                            .fetch(
+                                user.id
+                            )
+                            .catch(
+                                () => null
+                            );
 
                     const embed =
                         createEmbed(
                             "User Information",
                             `**Username:** ${user.tag}\n` +
-                            `**ID:** ${user.id}\n` +
+                            `**User ID:** ${user.id}\n` +
                             `**Created:** <t:${Math.floor(
                                 user.createdTimestamp / 1000
                             )}:F>`
+                        )
+                        .setThumbnail(
+                            user.displayAvatarURL()
                         );
 
-                    if (member?.joinedTimestamp) {
+                    if (
+                        member?.joinedTimestamp
+                    ) {
+
                         embed.addFields({
-                            name: "Joined Server",
+                            name:
+                                "Joined Server",
                             value:
                                 `<t:${Math.floor(
                                     member.joinedTimestamp / 1000
@@ -689,17 +1014,20 @@ client.on(
                         });
                     }
 
-                    embed.setThumbnail(
-                        user.displayAvatarURL()
-                    );
-
                     return interaction.reply({
-                        embeds: [embed]
+                        embeds: [
+                            embed
+                        ]
                     });
                 }
 
+                // ----------------------------------------------
                 // PROFILE
-                if (command === "profile") {
+                // ----------------------------------------------
+
+                if (
+                    command === "profile"
+                ) {
 
                     const member =
                         interaction.member;
@@ -715,11 +1043,14 @@ client.on(
                                 `**Roles:** ${
                                     member.roles.cache
                                         .filter(
-                                            r =>
-                                                r.id !==
+                                            role =>
+                                                role.id !==
                                                 interaction.guild.id
                                         )
-                                        .map(r => r.toString())
+                                        .map(
+                                            role =>
+                                                role.toString()
+                                        )
                                         .join(", ") ||
                                     "None"
                                 }`
@@ -730,20 +1061,33 @@ client.on(
                     });
                 }
 
-                // BAN
-                if (command === "ban") {
+                // ==================================================
+                // MODERATION
+                // ==================================================
+
+                if (
+                    command === "ban"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user");
+                        interaction.options.getUser(
+                            "user"
+                        );
 
                     const reason =
-                        interaction.options.getString("reason") ||
+                        interaction.options.getString(
+                            "reason"
+                        ) ||
                         "No reason provided";
 
                     const member =
                         await interaction.guild.members
-                            .fetch(user.id)
-                            .catch(() => null);
+                            .fetch(
+                                user.id
+                            )
+                            .catch(
+                                () => null
+                            );
 
                     if (!member) {
                         return interaction.reply({
@@ -753,7 +1097,9 @@ client.on(
                         });
                     }
 
-                    await member.ban({ reason });
+                    await member.ban({
+                        reason
+                    });
 
                     return interaction.reply({
                         content:
@@ -761,20 +1107,29 @@ client.on(
                     });
                 }
 
-                // KICK
-                if (command === "kick") {
+                if (
+                    command === "kick"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user");
+                        interaction.options.getUser(
+                            "user"
+                        );
 
                     const reason =
-                        interaction.options.getString("reason") ||
+                        interaction.options.getString(
+                            "reason"
+                        ) ||
                         "No reason provided";
 
                     const member =
                         await interaction.guild.members
-                            .fetch(user.id)
-                            .catch(() => null);
+                            .fetch(
+                                user.id
+                            )
+                            .catch(
+                                () => null
+                            );
 
                     if (!member) {
                         return interaction.reply({
@@ -784,7 +1139,9 @@ client.on(
                         });
                     }
 
-                    await member.kick(reason);
+                    await member.kick(
+                        reason
+                    );
 
                     return interaction.reply({
                         content:
@@ -792,27 +1149,39 @@ client.on(
                     });
                 }
 
-                // TIMEOUT
-                if (command === "timeout") {
+                if (
+                    command === "timeout"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user");
+                        interaction.options.getUser(
+                            "user"
+                        );
 
                     const minutes =
-                        interaction.options.getInteger("minutes");
+                        interaction.options.getInteger(
+                            "minutes"
+                        );
 
                     const reason =
-                        interaction.options.getString("reason") ||
+                        interaction.options.getString(
+                            "reason"
+                        ) ||
                         "No reason provided";
 
                     const member =
                         await interaction.guild.members
-                            .fetch(user.id)
-                            .catch(() => null);
+                            .fetch(
+                                user.id
+                            )
+                            .catch(
+                                () => null
+                            );
 
                     if (!member) {
                         return interaction.reply({
-                            content: "Member not found.",
+                            content:
+                                "Member not found.",
                             ephemeral: true
                         });
                     }
@@ -828,25 +1197,35 @@ client.on(
                     });
                 }
 
-                // UNTIMEOUT
-                if (command === "untimeout") {
+                if (
+                    command === "untimeout"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user");
+                        interaction.options.getUser(
+                            "user"
+                        );
 
                     const member =
                         await interaction.guild.members
-                            .fetch(user.id)
-                            .catch(() => null);
+                            .fetch(
+                                user.id
+                            )
+                            .catch(
+                                () => null
+                            );
 
                     if (!member) {
                         return interaction.reply({
-                            content: "Member not found.",
+                            content:
+                                "Member not found.",
                             ephemeral: true
                         });
                     }
 
-                    await member.timeout(null);
+                    await member.timeout(
+                        null
+                    );
 
                     return interaction.reply({
                         content:
@@ -854,31 +1233,48 @@ client.on(
                     });
                 }
 
-                // WARN
-                if (command === "warn") {
+                if (
+                    command === "warn"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user");
+                        interaction.options.getUser(
+                            "user"
+                        );
 
                     const reason =
-                        interaction.options.getString("reason");
+                        interaction.options.getString(
+                            "reason"
+                        );
 
-                    if (!warnings[interaction.guild.id]) {
-                        warnings[interaction.guild.id] = {};
+                    if (
+                        !warnings[
+                            interaction.guild.id
+                        ]
+                    ) {
+                        warnings[
+                            interaction.guild.id
+                        ] = {};
                     }
 
                     if (
-                        !warnings[interaction.guild.id][user.id]
+                        !warnings[
+                            interaction.guild.id
+                        ][user.id]
                     ) {
-                        warnings[interaction.guild.id][user.id] = [];
+                        warnings[
+                            interaction.guild.id
+                        ][user.id] = [];
                     }
 
                     warnings[
                         interaction.guild.id
                     ][user.id].push({
                         reason,
-                        moderator: interaction.user.id,
-                        timestamp: Date.now()
+                        moderator:
+                            interaction.user.id,
+                        timestamp:
+                            Date.now()
                     });
 
                     saveJSON(
@@ -892,11 +1288,14 @@ client.on(
                     });
                 }
 
-                // WARNINGS
-                if (command === "warnings") {
+                if (
+                    command === "warnings"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user") ||
+                        interaction.options.getUser(
+                            "user"
+                        ) ||
                         interaction.user;
 
                     const list =
@@ -904,7 +1303,9 @@ client.on(
                             interaction.guild.id
                         ]?.[user.id] || [];
 
-                    if (!list.length) {
+                    if (
+                        !list.length
+                    ) {
                         return interaction.reply({
                             content:
                                 `**${user.tag}** has no warnings.`,
@@ -916,24 +1317,29 @@ client.on(
                         embeds: [
                             createEmbed(
                                 `Warnings — ${user.tag}`,
-                                list
-                                    .map(
-                                        (w, i) =>
-                                            `**${i + 1}.** ${w.reason} — <@${w.moderator}>`
-                                    )
-                                    .join("\n")
+                                list.map(
+                                    (warning, index) =>
+                                        `**${index + 1}.** ${warning.reason} — <@${warning.moderator}>`
+                                ).join("\n")
                             )
                         ]
                     });
                 }
 
-                // CLEAR WARNINGS
-                if (command === "clearwarnings") {
+                if (
+                    command === "clearwarnings"
+                ) {
 
                     const user =
-                        interaction.options.getUser("user");
+                        interaction.options.getUser(
+                            "user"
+                        );
 
-                    if (warnings[interaction.guild.id]) {
+                    if (
+                        warnings[
+                            interaction.guild.id
+                        ]
+                    ) {
                         delete warnings[
                             interaction.guild.id
                         ][user.id];
@@ -950,58 +1356,75 @@ client.on(
                     });
                 }
 
-                // PURGE
-                if (command === "purge") {
+                if (
+                    command === "purge"
+                ) {
 
                     const amount =
-                        interaction.options.getInteger("amount");
-
-                    const deleted =
-                        await interaction.channel.bulkDelete(
-                            amount,
-                            true
+                        interaction.options.getInteger(
+                            "amount"
                         );
+
+                    await interaction.channel.bulkDelete(
+                        amount,
+                        true
+                    );
 
                     return interaction.reply({
                         content:
-                            `Deleted ${deleted.size} message(s).`,
+                            `Deleted ${amount} message(s).`,
                         ephemeral: true
                     });
                 }
 
-                // LOCK
-                if (command === "lock") {
+                // ==================================================
+                // MANAGEMENT
+                // ==================================================
+
+                if (
+                    command === "lock"
+                ) {
 
                     await interaction.channel
                         .permissionOverwrites.edit(
                             interaction.guild.roles.everyone,
-                            { SendMessages: false }
+                            {
+                                SendMessages: false
+                            }
                         );
 
                     return interaction.reply({
-                        content: "Channel locked."
+                        content:
+                            "Channel locked."
                     });
                 }
 
-                // UNLOCK
-                if (command === "unlock") {
+                if (
+                    command === "unlock"
+                ) {
 
                     await interaction.channel
                         .permissionOverwrites.edit(
                             interaction.guild.roles.everyone,
-                            { SendMessages: null }
+                            {
+                                SendMessages: null
+                            }
                         );
 
                     return interaction.reply({
-                        content: "Channel unlocked."
+                        content:
+                            "Channel unlocked."
                     });
                 }
 
-                // SLOWMODE
-                if (command === "slowmode") {
+                if (
+                    command === "slowmode"
+                ) {
 
                     const seconds =
-                        interaction.options.getInteger("seconds");
+                        interaction.options.getInteger(
+                            "seconds"
+                        );
 
                     await interaction.channel.setRateLimitPerUser(
                         seconds
@@ -1015,17 +1438,22 @@ client.on(
                     });
                 }
 
-                // ROLE
-                if (command === "role") {
+                if (
+                    command === "role"
+                ) {
 
                     const sub =
                         interaction.options.getSubcommand();
 
                     const member =
-                        interaction.options.getMember("user");
+                        interaction.options.getMember(
+                            "user"
+                        );
 
                     const role =
-                        interaction.options.getRole("role");
+                        interaction.options.getRole(
+                            "role"
+                        );
 
                     if (
                         role.position >=
@@ -1038,8 +1466,24 @@ client.on(
                         });
                     }
 
-                    if (sub === "add") {
-                        await member.roles.add(role);
+                    if (
+                        role.position >=
+                        interaction.guild.members.me.roles.highest.position
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "My highest role is not high enough to manage that role.",
+                            ephemeral: true
+                        });
+                    }
+
+                    if (
+                        sub === "add"
+                    ) {
+
+                        await member.roles.add(
+                            role
+                        );
 
                         return interaction.reply({
                             content:
@@ -1047,7 +1491,9 @@ client.on(
                         });
                     }
 
-                    await member.roles.remove(role);
+                    await member.roles.remove(
+                        role
+                    );
 
                     return interaction.reply({
                         content:
@@ -1055,11 +1501,14 @@ client.on(
                     });
                 }
 
-                // ANNOUNCE
-                if (command === "announce") {
+                if (
+                    command === "announce"
+                ) {
 
                     const message =
-                        interaction.options.getString("message");
+                        interaction.options.getString(
+                            "message"
+                        );
 
                     return interaction.reply({
                         embeds: [
@@ -1074,18 +1523,32 @@ client.on(
                     });
                 }
 
-                // EMBED
-                if (command === "embed") {
+                // ==================================================
+                // EMBED BUILDER
+                // ==================================================
 
-                    return showEmbedBuilder(
+                if (
+                    command === "embed"
+                ) {
+
+                    return sendEmbedBuilder(
                         interaction
                     );
                 }
 
+                // ==================================================
                 // TICKET CONFIG
-                if (command === "ticketconfig") {
+                // ==================================================
 
-                    if (!canManage(interaction.member)) {
+                if (
+                    command === "ticketconfig"
+                ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "You need Manage Server permissions.",
@@ -1098,10 +1561,19 @@ client.on(
                     );
                 }
 
+                // ==================================================
                 // SUBMIT CONFIG
-                if (command === "submitconfig") {
+                // ==================================================
 
-                    if (!canManage(interaction.member)) {
+                if (
+                    command === "submitconfig"
+                ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "You need Manage Server permissions.",
@@ -1114,10 +1586,19 @@ client.on(
                     );
                 }
 
+                // ==================================================
                 // REPORT SETUP
-                if (command === "reportsetup") {
+                // ==================================================
 
-                    if (!canManage(interaction.member)) {
+                if (
+                    command === "reportsetup"
+                ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "You need Manage Server permissions.",
@@ -1130,10 +1611,19 @@ client.on(
                     );
                 }
 
+                // ==================================================
                 // VERIFICATION
-                if (command === "verification") {
+                // ==================================================
 
-                    if (!canManage(interaction.member)) {
+                if (
+                    command === "verification"
+                ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "You need Manage Server permissions.",
@@ -1141,174 +1631,473 @@ client.on(
                         });
                     }
 
-                    return sendVerificationPanel(
-                        interaction
-                    );
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "verification_start"
+                                    )
+                                    .setLabel(
+                                        "Verify"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Primary
+                                    )
+                            );
+
+                    await interaction.channel.send({
+                        embeds: [
+                            createEmbed(
+                                "Server Verification",
+                                "Click the button below to verify yourself."
+                            )
+                        ],
+                        components: [
+                            row
+                        ]
+                    });
+
+                    return interaction.reply({
+                        content:
+                            "Verification panel sent.",
+                        ephemeral: true
+                    });
                 }
             }
 
-            // ====================================================
+            // ==================================================
             // BUTTONS
-            // ====================================================
+            // ==================================================
 
-            if (interaction.isButton()) {
+            if (
+                interaction.isButton()
+            ) {
 
-                // EMBED BUILDER
+                const id =
+                    interaction.customId;
+
+                // ==================================================
+                // VERIFICATION
+                // ==================================================
+
                 if (
-                    interaction.customId ===
-                    "embed_open"
+                    id ===
+                    "verification_start"
                 ) {
-                    return showEmbedBuilder(
-                        interaction
+
+                    const guildConfig =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    if (
+                        !guildConfig.verificationRoleId
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "Verification has not been configured with a role yet.",
+                            ephemeral: true
+                        });
+                    }
+
+                    const role =
+                        interaction.guild.roles.cache.get(
+                            guildConfig.verificationRoleId
+                        );
+
+                    if (!role) {
+                        return interaction.reply({
+                            content:
+                                "The configured verification role no longer exists.",
+                            ephemeral: true
+                        });
+                    }
+
+                    await interaction.member.roles.add(
+                        role
+                    );
+
+                    return interaction.reply({
+                        content:
+                            `You have been verified and given ${role}.`,
+                        ephemeral: true
+                    });
+                }
+
+                // ==================================================
+                // EMBED BUILDER BUTTONS
+                // ==================================================
+
+                if (
+                    id === "embed_edit"
+                ) {
+
+                    const modal =
+                        new ModalBuilder()
+                            .setCustomId(
+                                "embed_builder_modal"
+                            )
+                            .setTitle(
+                                "Create Webhook Embed"
+                            );
+
+                    const title =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "embed_title"
+                            )
+                            .setLabel(
+                                "Embed Title"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(256);
+
+                    const description =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "embed_description"
+                            )
+                            .setLabel(
+                                "Description"
+                            )
+                            .setStyle(
+                                TextInputStyle.Paragraph
+                            )
+                            .setRequired(true)
+                            .setMaxLength(4000);
+
+                    const webhookName =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "webhook_name"
+                            )
+                            .setLabel(
+                                "Webhook Name"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(80)
+                            .setValue(
+                                "Server Listing"
+                            );
+
+                    modal.addComponents(
+                        new ActionRowBuilder()
+                            .addComponents(
+                                title
+                            ),
+                        new ActionRowBuilder()
+                            .addComponents(
+                                description
+                            ),
+                        new ActionRowBuilder()
+                            .addComponents(
+                                webhookName
+                            )
+                    );
+
+                    return interaction.showModal(
+                        modal
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "embed_edit"
+                    id === "embed_channel"
                 ) {
-                    return showEmbedModal(
-                        interaction
+
+                    const channels =
+                        interaction.guild.channels.cache
+                            .filter(
+                                channel =>
+                                    channel.type ===
+                                    ChannelType.GuildText
+                            )
+                            .first(25);
+
+                    if (
+                        !channels.size
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "No text channels found.",
+                            ephemeral: true
+                        });
+                    }
+
+                    const menu =
+                        new StringSelectMenuBuilder()
+                            .setCustomId(
+                                "embed_channel_select"
+                            )
+                            .setPlaceholder(
+                                "Select a channel"
+                            )
+                            .addOptions(
+                                channels.map(
+                                    channel => ({
+                                        label:
+                                            channel.name.substring(
+                                                0,
+                                                100
+                                            ),
+                                        value:
+                                            channel.id
+                                    })
+                                )
+                            );
+
+                    return interaction.reply({
+                        content:
+                            "Select where the webhook embed should be sent.",
+                        components: [
+                            new ActionRowBuilder()
+                                .addComponents(
+                                    menu
+                                )
+                        ],
+                        ephemeral: true
+                    });
+                }
+
+                if (
+                    id === "embed_button"
+                ) {
+
+                    const current =
+                        embedBuilders.get(
+                            interaction.user.id
+                        ) || {};
+
+                    current.buttonEnabled =
+                        !current.buttonEnabled;
+
+                    embedBuilders.set(
+                        interaction.user.id,
+                        current
+                    );
+
+                    return interaction.update(
+                        buildEmbedBuilderMessage(
+                            current
+                        )
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "embed_send"
+                    id === "embed_send"
                 ) {
 
-                    const draft =
-                        interaction.client.embedDrafts?.get(
+                    const current =
+                        embedBuilders.get(
                             interaction.user.id
                         );
 
-                    if (!draft) {
+                    if (
+                        !current ||
+                        !current.title ||
+                        !current.description
+                    ) {
                         return interaction.reply({
                             content:
-                                "There is no embed ready to send. Use Edit Embed first.",
+                                "Complete the embed details first.",
                             ephemeral: true
                         });
                     }
+
+                    if (
+                        !current.channelId
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "Choose a channel first.",
+                            ephemeral: true
+                        });
+                    }
+
+                    await interaction.deferReply({
+                        ephemeral: true
+                    });
 
                     const channel =
                         interaction.guild.channels.cache.get(
-                            draft.channelId
+                            current.channelId
                         );
 
                     if (!channel) {
-                        return interaction.reply({
-                            content:
-                                "The selected channel no longer exists.",
-                            ephemeral: true
-                        });
+                        return interaction.editReply(
+                            "The selected channel no longer exists."
+                        );
                     }
 
-                    const webhook =
-                        await getBotWebhook(
-                            channel,
-                            draft.webhookName ||
-                            "Server Listings"
+                    const webhooks =
+                        await channel.fetchWebhooks();
+
+                    let webhook =
+                        webhooks.find(
+                            hook =>
+                                hook.owner?.id ===
+                                client.user.id
                         );
 
                     if (!webhook) {
-                        return interaction.reply({
-                            content:
-                                "I couldn't create the webhook.",
-                            ephemeral: true
+                        webhook =
+                            await channel.createWebhook({
+                                name:
+                                    current.webhookName ||
+                                    "Server Listing"
+                            });
+                    } else if (
+                        current.webhookName
+                    ) {
+                        await webhook.edit({
+                            name:
+                                current.webhookName
                         });
                     }
 
                     const embed =
                         new EmbedBuilder()
-                            .setColor(BRAND_COLOUR)
+                            .setColor(
+                                BRAND_COLOUR
+                            )
                             .setTitle(
-                                draft.title
+                                `${LOGO} ${current.title}`
                             )
                             .setDescription(
-                                draft.description
+                                current.description
                             )
                             .setTimestamp();
 
-                    if (draft.footer) {
-                        embed.setFooter({
-                            text: draft.footer
-                        });
-                    }
+                    let components = [];
 
-                    const components = [];
+                    if (
+                        current.buttonEnabled &&
+                        current.buttonUrl
+                    ) {
 
-                    if (draft.buttonLabel && draft.buttonUrl) {
-                        components.push(
+                        components = [
                             new ActionRowBuilder()
                                 .addComponents(
                                     new ButtonBuilder()
                                         .setLabel(
-                                            draft.buttonLabel
+                                            current.buttonLabel ||
+                                            "Join Server!"
                                         )
                                         .setStyle(
                                             ButtonStyle.Link
                                         )
                                         .setURL(
-                                            draft.buttonUrl
+                                            current.buttonUrl
                                         )
                                 )
-                        );
+                        ];
                     }
 
                     await webhook.send({
                         username:
-                            draft.webhookName ||
-                            "Server Listings",
+                            current.webhookName ||
+                            "Server Listing",
                         avatarURL:
                             client.user.displayAvatarURL(),
-                        embeds: [embed],
+                        embeds: [
+                            embed
+                        ],
                         components
                     });
 
-                    interaction.client.embedDrafts.delete(
+                    embedBuilders.delete(
                         interaction.user.id
                     );
 
-                    return interaction.update({
-                        embeds: [
-                            createEmbed(
-                                "Embed Sent",
-                                `Your webhook embed has been sent to ${channel}.`
+                    return interaction.editReply(
+                        `Webhook embed sent to ${channel}.`
+                    );
+                }
+
+                if (
+                    id === "embed_button_settings"
+                ) {
+
+                    const modal =
+                        new ModalBuilder()
+                            .setCustomId(
+                                "embed_button_modal"
                             )
-                        ],
-                        components: []
-                    });
+                            .setTitle(
+                                "Button Settings"
+                            );
+
+                    const label =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "button_label"
+                            )
+                            .setLabel(
+                                "Button Name"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(80)
+                            .setValue(
+                                "Join Server!"
+                            );
+
+                    const url =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "button_url"
+                            )
+                            .setLabel(
+                                "Button URL"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setPlaceholder(
+                                "https://discord.gg/example"
+                            );
+
+                    modal.addComponents(
+                        new ActionRowBuilder()
+                            .addComponents(
+                                label
+                            ),
+                        new ActionRowBuilder()
+                            .addComponents(
+                                url
+                            )
+                    );
+
+                    return interaction.showModal(
+                        modal
+                    );
                 }
 
-                if (
-                    interaction.customId ===
-                    "embed_cancel"
-                ) {
-                    if (interaction.client.embedDrafts) {
-                        interaction.client.embedDrafts.delete(
-                            interaction.user.id
-                        );
-                    }
+                // ==================================================
+                // TICKET
+                // ==================================================
 
-                    return interaction.update({
-                        content: "Embed builder closed.",
-                        embeds: [],
-                        components: []
-                    });
-                }
-
-                // OPEN TICKET
                 if (
-                    interaction.customId ===
-                    "open_ticket"
+                    id === "open_ticket"
                 ) {
 
-                    const cfg =
+                    const guildConfig =
                         getGuildConfig(
                             interaction.guild.id
                         );
 
-                    if (!cfg.ticketStaffRoleId) {
+                    if (
+                        !guildConfig.ticketStaffRoleId
+                    ) {
                         return interaction.reply({
                             content:
                                 "The ticket system has not been configured.",
@@ -1318,8 +2107,8 @@ client.on(
 
                     const existing =
                         interaction.guild.channels.cache.find(
-                            c =>
-                                c.topic ===
+                            channel =>
+                                channel.topic ===
                                 `ticket-owner:${interaction.user.id}`
                         );
 
@@ -1333,28 +2122,37 @@ client.on(
 
                     const staffRole =
                         interaction.guild.roles.cache.get(
-                            cfg.ticketStaffRoleId
+                            guildConfig.ticketStaffRoleId
                         );
 
                     if (!staffRole) {
                         return interaction.reply({
                             content:
-                                "The ticket staff role no longer exists.",
+                                "The configured ticket staff role no longer exists.",
                             ephemeral: true
                         });
                     }
 
+                    const category =
+                        guildConfig.ticketCategoryId
+                            ? interaction.guild.channels.cache.get(
+                                  guildConfig.ticketCategoryId
+                              )
+                            : null;
+
                     const channel =
                         await interaction.guild.channels.create({
                             name:
-                                `ticket-${safeName(
+                                `ticket-${safeChannelName(
                                     interaction.user.username
                                 )}`,
                             type:
                                 ChannelType.GuildText,
                             parent:
-                                cfg.ticketCategoryId ||
-                                undefined,
+                                category?.type ===
+                                ChannelType.GuildCategory
+                                    ? category.id
+                                    : undefined,
                             topic:
                                 `ticket-owner:${interaction.user.id}`,
                             permissionOverwrites: [
@@ -1397,35 +2195,42 @@ client.on(
                             ]
                         });
 
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "claim_ticket"
+                                    )
+                                    .setLabel(
+                                        "Claim"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Primary
+                                    ),
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "close_ticket"
+                                    )
+                                    .setLabel(
+                                        "Close"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Danger
+                                    )
+                            );
+
                     await channel.send({
                         content:
                             `${staffRole} ${interaction.user}`,
                         embeds: [
                             createEmbed(
                                 "Support Ticket",
-                                `Welcome ${interaction.user}!\n\nPlease explain what you need help with.`
+                                `Welcome ${interaction.user}!\n\nPlease explain what you need help with. A member of staff will assist you shortly.`
                             )
                         ],
                         components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "claim_ticket"
-                                        )
-                                        .setLabel("Claim")
-                                        .setStyle(
-                                            ButtonStyle.Primary
-                                        ),
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "close_ticket"
-                                        )
-                                        .setLabel("Close")
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                )
+                            row
                         ]
                     });
 
@@ -1436,13 +2241,15 @@ client.on(
                     });
                 }
 
-                // CLAIM
                 if (
-                    interaction.customId ===
-                    "claim_ticket"
+                    id === "claim_ticket"
                 ) {
 
-                    if (!isStaff(interaction.member)) {
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "Only staff can claim tickets.",
@@ -1460,13 +2267,15 @@ client.on(
                     });
                 }
 
-                // CLOSE
                 if (
-                    interaction.customId ===
-                    "close_ticket"
+                    id === "close_ticket"
                 ) {
 
-                    if (!isStaff(interaction.member)) {
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "Only staff can close tickets.",
@@ -1474,66 +2283,54 @@ client.on(
                         });
                     }
 
-                    const cfg =
-                        getGuildConfig(
-                            interaction.guild.id
-                        );
-
-                    if (cfg.ticketLogChannelId) {
-                        const log =
-                            interaction.guild.channels.cache.get(
-                                cfg.ticketLogChannelId
-                            );
-
-                        if (log) {
-                            await log.send({
-                                embeds: [
-                                    createEmbed(
-                                        "Ticket Closed",
-                                        `**Channel:** ${interaction.channel.name}\n` +
-                                        `**Closed by:** ${interaction.user}\n` +
-                                        `**Time:** <t:${Math.floor(
-                                            Date.now() / 1000
-                                        )}:F>`
-                                    )
-                                ]
-                            }).catch(() => {});
-                        }
-                    }
-
                     await interaction.reply({
                         embeds: [
                             createEmbed(
                                 "Ticket Closed",
-                                `This ticket will be deleted in 5 seconds.\n\nClosed by ${interaction.user}.`
+                                `This ticket will be deleted shortly.\n\nClosed by ${interaction.user}.`
                             )
                         ]
                     });
 
-                    setTimeout(() => {
-                        interaction.channel
-                            .delete()
-                            .catch(() => {});
-                    }, 5000);
+                    await sendTicketLog(
+                        interaction.guild,
+                        interaction.channel,
+                        interaction.user
+                    );
+
+                    setTimeout(
+                        () => {
+                            interaction.channel
+                                .delete()
+                                .catch(
+                                    () => {}
+                                );
+                        },
+                        3000
+                    );
 
                     return;
                 }
 
-                // SUBMIT SERVER
+                // ==================================================
+                // SERVER SUBMISSION
+                // ==================================================
+
                 if (
-                    interaction.customId ===
-                    "submit_server"
+                    id === "submit_server"
                 ) {
 
-                    const cfg =
+                    const guildConfig =
                         getGuildConfig(
                             interaction.guild.id
                         );
 
-                    if (!cfg.submitStaffRoleId) {
+                    if (
+                        !guildConfig.submitStaffRoleId
+                    ) {
                         return interaction.reply({
                             content:
-                                "The submission system has not been configured.",
+                                "The submission system has not been configured yet.",
                             ephemeral: true
                         });
                     }
@@ -1547,81 +2344,96 @@ client.on(
                                 "Submit Your Server"
                             );
 
+                    const name =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_name"
+                            )
+                            .setLabel(
+                                "Server Name"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(100);
+
+                    const description =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_description"
+                            )
+                            .setLabel(
+                                "Server Description"
+                            )
+                            .setStyle(
+                                TextInputStyle.Paragraph
+                            )
+                            .setRequired(true)
+                            .setMaxLength(1000);
+
+                    const invite =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_invite"
+                            )
+                            .setLabel(
+                                "Discord Invite"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(200);
+
+                    const category =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_category"
+                            )
+                            .setLabel(
+                                "Server Category"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(100);
+
+                    const owner =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "server_owner"
+                            )
+                            .setLabel(
+                                "Your Role"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(100);
+
                     modal.addComponents(
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "server_name"
-                                    )
-                                    .setLabel(
-                                        "Server Name"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Short
-                                    )
-                                    .setRequired(true)
-                                    .setMaxLength(100)
+                                name
                             ),
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "server_description"
-                                    )
-                                    .setLabel(
-                                        "Server Description"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Paragraph
-                                    )
-                                    .setRequired(true)
-                                    .setMaxLength(1000)
+                                description
                             ),
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "server_invite"
-                                    )
-                                    .setLabel(
-                                        "Discord Invite"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Short
-                                    )
-                                    .setRequired(true)
-                                    .setPlaceholder(
-                                        "https://discord.gg/example"
-                                    )
+                                invite
                             ),
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "server_category"
-                                    )
-                                    .setLabel(
-                                        "Server Category"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Short
-                                    )
-                                    .setRequired(true)
+                                category
                             ),
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "server_owner"
-                                    )
-                                    .setLabel(
-                                        "Your Role"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Short
-                                    )
-                                    .setRequired(true)
+                                owner
                             )
                     );
 
@@ -1630,14 +2442,21 @@ client.on(
                     );
                 }
 
-                // ACCEPT SUBMISSION
+                // ==================================================
+                // ACCEPT
+                // ==================================================
+
                 if (
-                    interaction.customId.startsWith(
+                    id.startsWith(
                         "submission_accept_"
                     )
                 ) {
 
-                    if (!isStaff(interaction.member)) {
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "Only staff can approve submissions.",
@@ -1649,14 +2468,16 @@ client.on(
                         ephemeral: true
                     });
 
-                    const id =
-                        interaction.customId.replace(
+                    const submissionId =
+                        id.replace(
                             "submission_accept_",
                             ""
                         );
 
                     const submission =
-                        submissions.get(id);
+                        submissions.get(
+                            submissionId
+                        );
 
                     if (!submission) {
                         return interaction.editReply(
@@ -1664,91 +2485,119 @@ client.on(
                         );
                     }
 
-                    const cfg =
+                    const guildConfig =
                         getGuildConfig(
                             interaction.guild.id
                         );
 
-                    const communityChannel =
+                    const listingChannel =
                         interaction.guild.channels.cache.get(
-                            cfg.verifiedChannelId
+                            guildConfig.verifiedChannelId
                         );
 
-                    if (!communityChannel) {
+                    if (
+                        !listingChannel
+                    ) {
                         return interaction.editReply(
-                            "The community/verified server channel has not been configured."
+                            "The verified/community channel has not been configured."
                         );
                     }
 
-                    // Give verified role
-                    if (cfg.verifiedRoleId) {
+                    // Give verified role.
+                    if (
+                        guildConfig.verifiedRoleId
+                    ) {
 
-                        const member =
+                        const applicant =
                             await interaction.guild.members
                                 .fetch(
                                     submission.userId
                                 )
-                                .catch(() => null);
+                                .catch(
+                                    () => null
+                                );
 
                         const role =
                             interaction.guild.roles.cache.get(
-                                cfg.verifiedRoleId
+                                guildConfig.verifiedRoleId
                             );
 
-                        if (member && role) {
-                            await member.roles
-                                .add(role)
-                                .catch(() => {});
+                        if (
+                            applicant &&
+                            role
+                        ) {
+                            await applicant.roles
+                                .add(
+                                    role
+                                )
+                                .catch(
+                                    () => {}
+                                );
                         }
                     }
 
-                    const invite =
-                        normaliseInvite(
-                            submission.invite
-                        );
+                    // ------------------------------------------
+                    // WEBHOOK
+                    // ------------------------------------------
 
-                    if (!invite) {
-                        return interaction.editReply(
-                            "The submitted Discord invite is invalid."
-                        );
-                    }
+                    const webhooks =
+                        await listingChannel.fetchWebhooks();
 
-                    // IMPORTANT:
-                    // WEBHOOK NAME IS ALWAYS "Server Listing"
-                    const webhook =
-                        await getBotWebhook(
-                            communityChannel,
-                            "Server Listing"
+                    let webhook =
+                        webhooks.find(
+                            hook =>
+                                hook.owner?.id ===
+                                client.user.id
                         );
 
                     if (!webhook) {
-                        return interaction.editReply(
-                            "I could not create the listing webhook."
+                        webhook =
+                            await listingChannel.createWebhook({
+                                name:
+                                    "Server Listing"
+                            });
+                    } else {
+                        await webhook.edit({
+                            name:
+                                "Server Listing"
+                        }).catch(
+                            () => {}
                         );
                     }
 
                     // IMPORTANT:
-                    // INVITE IS NOT PUT INSIDE THE EMBED
-                    const listing =
+                    // The server invite is NOT in the embed.
+                    // It is ONLY in the button underneath.
+
+                    const listingEmbed =
                         new EmbedBuilder()
                             .setColor(
                                 BRAND_COLOUR
                             )
                             .setTitle(
-                                `${LOGO} ${submission.serverName}`
+                                `${LOGO} Server Listing`
                             )
                             .setDescription(
                                 submission.description
                             )
                             .addFields(
                                 {
-                                    name: "Category",
+                                    name:
+                                        "Server Name",
+                                    value:
+                                        submission.serverName,
+                                    inline: true
+                                },
+                                {
+                                    name:
+                                        "Category",
                                     value:
                                         submission.category,
                                     inline: true
                                 },
                                 {
-                                    name: "Server Owner",
+                                    name:
+                                        "Server Owner",
                                     value:
                                         `<@${submission.userId}>`,
                                     inline: true
@@ -1756,11 +2605,10 @@ client.on(
                             )
                             .setFooter({
                                 text:
-                                    "Server Listing"
+                                    "Verified Server"
                             })
                             .setTimestamp();
 
-                    // JOIN BUTTON UNDER EMBED
                     const joinRow =
                         new ActionRowBuilder()
                             .addComponents(
@@ -1772,7 +2620,7 @@ client.on(
                                         ButtonStyle.Link
                                     )
                                     .setURL(
-                                        invite
+                                        submission.invite
                                     )
                             );
 
@@ -1782,81 +2630,91 @@ client.on(
                         avatarURL:
                             client.user.displayAvatarURL(),
                         embeds: [
-                            listing
+                            listingEmbed
                         ],
                         components: [
                             joinRow
                         ]
                     });
 
-                    // DM USER
+                    // ------------------------------------------
+                    // DM
+                    // ------------------------------------------
+
                     const applicant =
-                        await client.users
-                            .fetch(
-                                submission.userId
-                            )
-                            .catch(() => null);
+                        await client.users.fetch(
+                            submission.userId
+                        ).catch(
+                            () => null
+                        );
 
                     if (applicant) {
+
                         await applicant.send({
                             embeds: [
                                 createEmbed(
                                     "Server Approved",
-                                    `Your server **${submission.serverName}** has been approved and is now listed in the verified server channel.`
+                                    `Your server **${submission.serverName}** has been approved and added to the verified server listings.`
                                 )
                             ]
-                        }).catch(() => {});
+                        }).catch(
+                            () => {}
+                        );
                     }
 
-                    // Mark review message approved
-                    await interaction.message
-                        .edit({
-                            components: [
-                                new ActionRowBuilder()
-                                    .addComponents(
-                                        new ButtonBuilder()
-                                            .setCustomId(
-                                                "submission_done"
-                                            )
-                                            .setLabel(
-                                                "Approved"
-                                            )
-                                            .setStyle(
-                                                ButtonStyle.Success
-                                            )
-                                            .setDisabled(
-                                                true
-                                            )
-                                    )
-                            ]
-                        })
-                        .catch(() => {});
+                    // ------------------------------------------
+                    // UPDATE REVIEW CHANNEL
+                    // ------------------------------------------
 
-                    // Remove submission from memory
-                    submissions.delete(id);
+                    await interaction.channel.send({
+                        embeds: [
+                            createEmbed(
+                                "Submission Approved",
+                                `**${submission.serverName}** has been approved by ${interaction.user}.\n\nThe server has been posted in ${listingChannel}.`
+                            )
+                        ]
+                    }).catch(
+                        () => {}
+                    );
 
                     await interaction.editReply(
-                        "The server has been approved and posted to the community channel. The review channel will now close."
+                        "The server has been approved and listed."
+                    );
+
+                    submissions.delete(
+                        submissionId
                     );
 
                     // DELETE REVIEW CHANNEL
-                    setTimeout(() => {
-                        interaction.channel
-                            .delete()
-                            .catch(() => {});
-                    }, 3000);
+                    setTimeout(
+                        () => {
+                            interaction.channel
+                                .delete()
+                                .catch(
+                                    () => {}
+                                );
+                        },
+                        3000
+                    );
 
                     return;
                 }
 
-                // DENY SUBMISSION
+                // ==================================================
+                // DENY
+                // ==================================================
+
                 if (
-                    interaction.customId.startsWith(
+                    id.startsWith(
                         "submission_deny_"
                     )
                 ) {
 
-                    if (!isStaff(interaction.member)) {
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "Only staff can deny submissions.",
@@ -1864,13 +2722,18 @@ client.on(
                         });
                     }
 
-                    const id =
-                        interaction.customId.replace(
+                    const submissionId =
+                        id.replace(
                             "submission_deny_",
                             ""
                         );
 
-                    if (!submissions.has(id)) {
+                    const submission =
+                        submissions.get(
+                            submissionId
+                        );
+
+                    if (!submission) {
                         return interaction.reply({
                             content:
                                 "This submission is no longer available.",
@@ -1881,27 +2744,30 @@ client.on(
                     const modal =
                         new ModalBuilder()
                             .setCustomId(
-                                `submission_deny_modal_${id}`
+                                `submission_deny_modal_${submissionId}`
                             )
                             .setTitle(
                                 "Deny Submission"
                             );
 
+                    const reason =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "deny_reason"
+                            )
+                            .setLabel(
+                                "Reason"
+                            )
+                            .setStyle(
+                                TextInputStyle.Paragraph
+                            )
+                            .setRequired(true)
+                            .setMaxLength(1000);
+
                     modal.addComponents(
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "deny_reason"
-                                    )
-                                    .setLabel(
-                                        "Reason for denial"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Paragraph
-                                    )
-                                    .setRequired(true)
-                                    .setMaxLength(1000)
+                                reason
                             )
                     );
 
@@ -1910,24 +2776,13 @@ client.on(
                     );
                 }
 
+                // ==================================================
                 // REPORT SERVER
+                // ==================================================
+
                 if (
-                    interaction.customId ===
-                    "report_server"
+                    id === "report_server"
                 ) {
-
-                    const cfg =
-                        getGuildConfig(
-                            interaction.guild.id
-                        );
-
-                    if (!cfg.reportStaffRoleId) {
-                        return interaction.reply({
-                            content:
-                                "The server report system has not been configured.",
-                            ephemeral: true
-                        });
-                    }
 
                     const modal =
                         new ModalBuilder()
@@ -1938,35 +2793,60 @@ client.on(
                                 "Report a Server"
                             );
 
+                    const serverName =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "report_server_name"
+                            )
+                            .setLabel(
+                                "Server Name"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(100);
+
+                    const serverId =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "report_server_id"
+                            )
+                            .setLabel(
+                                "Server ID / Invite"
+                            )
+                            .setStyle(
+                                TextInputStyle.Short
+                            )
+                            .setRequired(true)
+                            .setMaxLength(200);
+
+                    const reason =
+                        new TextInputBuilder()
+                            .setCustomId(
+                                "report_reason"
+                            )
+                            .setLabel(
+                                "Reason for report"
+                            )
+                            .setStyle(
+                                TextInputStyle.Paragraph
+                            )
+                            .setRequired(true)
+                            .setMaxLength(1000);
+
                     modal.addComponents(
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "reported_server"
-                                    )
-                                    .setLabel(
-                                        "Server name / invite"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Short
-                                    )
-                                    .setRequired(true)
+                                serverName
                             ),
                         new ActionRowBuilder()
                             .addComponents(
-                                new TextInputBuilder()
-                                    .setCustomId(
-                                        "report_reason"
-                                    )
-                                    .setLabel(
-                                        "Reason for report"
-                                    )
-                                    .setStyle(
-                                        TextInputStyle.Paragraph
-                                    )
-                                    .setRequired(true)
-                                    .setMaxLength(1000)
+                                serverId
+                            ),
+                        new ActionRowBuilder()
+                            .addComponents(
+                                reason
                             )
                     );
 
@@ -1975,14 +2855,19 @@ client.on(
                     );
                 }
 
+                // ==================================================
                 // REPORT CLOSE
+                // ==================================================
+
                 if (
-                    interaction.customId.startsWith(
-                        "close_report_"
-                    )
+                    id === "close_report"
                 ) {
 
-                    if (!isStaff(interaction.member)) {
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "Only staff can close reports.",
@@ -1994,80 +2879,126 @@ client.on(
                         embeds: [
                             createEmbed(
                                 "Report Closed",
-                                `This report was closed by ${interaction.user}.`
+                                `This report has been closed by ${interaction.user}.`
                             )
                         ]
                     });
 
-                    setTimeout(() => {
-                        interaction.channel
-                            .delete()
-                            .catch(() => {});
-                    }, 3000);
+                    setTimeout(
+                        () => {
+                            interaction.channel
+                                .delete()
+                                .catch(
+                                    () => {}
+                                );
+                        },
+                        3000
+                    );
 
                     return;
                 }
 
-                // CONFIG PANELS
+                // ==================================================
+                // CONFIG BUTTONS
+                // ==================================================
+
                 if (
-                    interaction.customId ===
-                    "ticket_set_staff"
+                    id === "ticket_set_staff"
                 ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "You need Manage Server permissions.",
+                            ephemeral: true
+                        });
+                    }
+
                     return roleSelect(
                         interaction,
                         "ticket_staff_select",
-                        "Select the ticket staff role."
+                        "Select ticket staff role"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "ticket_set_category"
+                    id === "ticket_set_category"
                 ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "You need Manage Server permissions.",
+                            ephemeral: true
+                        });
+                    }
+
                     return categorySelect(
                         interaction,
                         "ticket_category_select",
-                        "Select the ticket category."
+                        "Select ticket category"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "ticket_set_logs"
+                    id === "ticket_set_logs"
                 ) {
+
+                    if (
+                        !canManage(
+                            interaction.member
+                        )
+                    ) {
+                        return interaction.reply({
+                            content:
+                                "You need Manage Server permissions.",
+                            ephemeral: true
+                        });
+                    }
+
                     return channelSelect(
                         interaction,
                         "ticket_logs_select",
-                        "Select the ticket log channel."
+                        "Select ticket logs channel"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "ticket_send_panel"
+                    id === "ticket_send_panel"
                 ) {
+
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "open_ticket"
+                                    )
+                                    .setLabel(
+                                        "Open Ticket"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Primary
+                                    )
+                            );
 
                     await interaction.channel.send({
                         embeds: [
                             createEmbed(
                                 "Support Tickets",
-                                "Need help? Open a ticket below and a member of staff will assist you."
+                                "Need help? Click the button below to open a private support ticket."
                             )
                         ],
                         components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "open_ticket"
-                                        )
-                                        .setLabel(
-                                            "Open Ticket"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Primary
-                                        )
-                                )
+                            row
                         ]
                     });
 
@@ -2079,9 +3010,9 @@ client.on(
                 }
 
                 if (
-                    interaction.customId ===
-                    "ticket_refresh"
+                    id === "ticket_refresh"
                 ) {
+
                     return sendTicketConfigPanel(
                         interaction,
                         true
@@ -2089,75 +3020,77 @@ client.on(
                 }
 
                 if (
-                    interaction.customId ===
-                    "submit_set_staff"
+                    id === "submit_set_staff"
                 ) {
+
                     return roleSelect(
                         interaction,
                         "submit_staff_select",
-                        "Select the submission staff role."
+                        "Select submission staff role"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "submit_set_review"
+                    id === "submit_set_review"
                 ) {
+
                     return categorySelect(
                         interaction,
                         "submit_review_select",
-                        "Select the submission review category."
+                        "Select review category"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "submit_set_verified"
+                    id === "submit_set_verified"
                 ) {
+
                     return channelSelect(
                         interaction,
                         "submit_verified_select",
-                        "Select the community/verified server channel."
+                        "Select community/verified channel"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "submit_set_verified_role"
+                    id === "submit_set_verified_role"
                 ) {
+
                     return roleSelect(
                         interaction,
                         "submit_verified_role_select",
-                        "Select the verified role."
+                        "Select verified role"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "submit_send_panel"
+                    id === "submit_send_panel"
                 ) {
+
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "submit_server"
+                                    )
+                                    .setLabel(
+                                        "Submit Server"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Primary
+                                    )
+                            );
 
                     await interaction.channel.send({
                         embeds: [
                             createEmbed(
                                 "Submit Your Server",
-                                "Want your server featured in our verified server listings?\n\nClick below to submit your server.\n\nAll submissions are manually reviewed."
+                                "Want your server featured in our verified server listings?\n\nClick the button below to submit your server.\n\nAll submissions are manually reviewed."
                             )
                         ],
                         components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "submit_server"
-                                        )
-                                        .setLabel(
-                                            "Submit Server"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Primary
-                                        )
-                                ]
+                            row
                         ]
                     });
 
@@ -2169,9 +3102,9 @@ client.on(
                 }
 
                 if (
-                    interaction.customId ===
-                    "submit_refresh"
+                    id === "submit_refresh"
                 ) {
+
                     return sendSubmitConfigPanel(
                         interaction,
                         true
@@ -2179,54 +3112,57 @@ client.on(
                 }
 
                 // REPORT CONFIG
+
                 if (
-                    interaction.customId ===
-                    "report_set_staff"
+                    id === "report_set_staff"
                 ) {
+
                     return roleSelect(
                         interaction,
                         "report_staff_select",
-                        "Select the report staff role."
+                        "Select report staff role"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "report_set_category"
+                    id === "report_set_category"
                 ) {
+
                     return categorySelect(
                         interaction,
                         "report_category_select",
-                        "Select the report category."
+                        "Select report category"
                     );
                 }
 
                 if (
-                    interaction.customId ===
-                    "report_send_panel"
+                    id === "report_send_panel"
                 ) {
+
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "report_server"
+                                    )
+                                    .setLabel(
+                                        "Report Server"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Danger
+                                    )
+                            );
 
                     await interaction.channel.send({
                         embeds: [
                             createEmbed(
                                 "Report a Server",
-                                "Seen a server that breaks the rules?\n\nUse the button below to submit a report to our staff team."
+                                "If you believe a listed server breaks our rules, you can report it to our staff team below."
                             )
                         ],
                         components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "report_server"
-                                        )
-                                        .setLabel(
-                                            "Report Server"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                ]
+                            row
                         ]
                     });
 
@@ -2238,77 +3174,41 @@ client.on(
                 }
 
                 if (
-                    interaction.customId ===
-                    "report_refresh"
+                    id === "report_refresh"
                 ) {
+
                     return sendReportConfigPanel(
                         interaction,
                         true
                     );
                 }
 
-                // VERIFICATION
                 if (
-                    interaction.customId ===
-                    "verification_set_role"
+                    id === "verification_set_role"
                 ) {
+
                     return roleSelect(
                         interaction,
                         "verification_role_select",
-                        "Select the verification role."
+                        "Select verification role"
                     );
                 }
+            }
+
+            // ==================================================
+            // SELECT MENUS
+            // ==================================================
+
+            if (
+                interaction.isStringSelectMenu()
+            ) {
+
+                const id =
+                    interaction.customId;
 
                 if (
-                    interaction.customId ===
-                    "verification_send_panel"
-                ) {
-
-                    await interaction.channel.send({
-                        embeds: [
-                            createEmbed(
-                                "Verification",
-                                "Click the button below to verify yourself."
-                            )
-                        ],
-                        components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "verify_member"
-                                        )
-                                        .setLabel(
-                                            "Verify"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Success
-                                        )
-                                )
-                        ]
-                    });
-
-                    return interaction.reply({
-                        content:
-                            "Verification panel sent.",
-                        ephemeral: true
-                    });
-                }
-
-                if (
-                    interaction.customId ===
-                    "verification_refresh"
-                ) {
-                    return sendVerificationPanel(
-                        interaction,
-                        true
-                    );
-                }
-
-                // VERIFY
-                if (
-                    interaction.customId ===
-                    "verify_member"
+                    id ===
+                    "ticket_staff_select"
                 ) {
 
                     const cfg =
@@ -2316,235 +3216,346 @@ client.on(
                             interaction.guild.id
                         );
 
-                    const role =
-                        interaction.guild.roles.cache.get(
-                            cfg.verificationRoleId
+                    cfg.ticketStaffRoleId =
+                        interaction.values[0];
+
+                    cfg.staffRoleId =
+                        cfg.staffRoleId ||
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Ticket staff role set to <@&${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "ticket_category_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
                         );
 
-                    if (!role) {
-                        return interaction.reply({
-                            content:
-                                "Verification has not been configured.",
-                            ephemeral: true
-                        });
-                    }
+                    cfg.ticketCategoryId =
+                        interaction.values[0];
 
-                    if (
-                        interaction.member.roles.cache.has(
-                            role.id
-                        )
-                    ) {
-                        return interaction.reply({
-                            content:
-                                "You are already verified.",
-                            ephemeral: true
-                        });
-                    }
+                    saveConfig();
 
-                    await interaction.member.roles.add(
-                        role
+                    return interaction.update({
+                        content:
+                            `Ticket category set to <#${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "ticket_logs_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.ticketLogsChannelId =
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Ticket logs channel set to <#${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "submit_staff_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.submitStaffRoleId =
+                        interaction.values[0];
+
+                    cfg.staffRoleId =
+                        cfg.staffRoleId ||
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Submission staff role set to <@&${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "submit_review_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.submitReviewCategoryId =
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Review category set to <#${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "submit_verified_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.verifiedChannelId =
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Community/verified channel set to <#${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "submit_verified_role_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.verifiedRoleId =
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Verified role set to <@&${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "report_staff_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.reportStaffRoleId =
+                        interaction.values[0];
+
+                    cfg.staffRoleId =
+                        cfg.staffRoleId ||
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Report staff role set to <@&${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "report_category_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.reportCategoryId =
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Report category set to <#${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "verification_role_select"
+                ) {
+
+                    const cfg =
+                        getGuildConfig(
+                            interaction.guild.id
+                        );
+
+                    cfg.verificationRoleId =
+                        interaction.values[0];
+
+                    saveConfig();
+
+                    return interaction.update({
+                        content:
+                            `Verification role set to <@&${interaction.values[0]}>.`,
+                        components: []
+                    });
+                }
+
+                if (
+                    id ===
+                    "embed_channel_select"
+                ) {
+
+                    const current =
+                        embedBuilders.get(
+                            interaction.user.id
+                        ) || {};
+
+                    current.channelId =
+                        interaction.values[0];
+
+                    embedBuilders.set(
+                        interaction.user.id,
+                        current
                     );
 
-                    return interaction.reply({
+                    return interaction.update({
                         content:
-                            "You have been successfully verified!",
-                        ephemeral: true
+                            `Embed channel set to <#${interaction.values[0]}>.`,
+                        components: []
                     });
                 }
             }
 
-            // ====================================================
-            // SELECT MENUS
-            // ====================================================
-
-            if (interaction.isStringSelectMenu()) {
-
-                const guildId =
-                    interaction.guild.id;
-
-                const cfg =
-                    getGuildConfig(guildId);
-
-                const value =
-                    interaction.values[0];
-
-                switch (interaction.customId) {
-
-                    case "ticket_staff_select":
-                        cfg.ticketStaffRoleId = value;
-                        break;
-
-                    case "ticket_category_select":
-                        cfg.ticketCategoryId = value;
-                        break;
-
-                    case "ticket_logs_select":
-                        cfg.ticketLogChannelId = value;
-                        break;
-
-                    case "submit_staff_select":
-                        cfg.submitStaffRoleId = value;
-                        cfg.staffRoleId ||= value;
-                        break;
-
-                    case "submit_review_select":
-                        cfg.submitReviewCategoryId = value;
-                        break;
-
-                    case "submit_verified_select":
-                        cfg.verifiedChannelId = value;
-                        break;
-
-                    case "submit_verified_role_select":
-                        cfg.verifiedRoleId = value;
-                        break;
-
-                    case "report_staff_select":
-                        cfg.reportStaffRoleId = value;
-                        break;
-
-                    case "report_category_select":
-                        cfg.reportCategoryId = value;
-                        break;
-
-                    case "verification_role_select":
-                        cfg.verificationRoleId = value;
-                        break;
-
-                    default:
-                        return;
-                }
-
-                saveJSON(
-                    configFile,
-                    config
-                );
-
-                return interaction.update({
-                    content:
-                        "Configuration updated successfully.",
-                    components: []
-                });
-            }
-
-            // ====================================================
+            // ==================================================
             // MODALS
-            // ====================================================
+            // ==================================================
 
-            if (interaction.isModalSubmit()) {
+            if (
+                interaction.isModalSubmit()
+            ) {
 
+                // ----------------------------------------------
                 // EMBED BUILDER
+                // ----------------------------------------------
+
                 if (
                     interaction.customId ===
                     "embed_builder_modal"
                 ) {
 
-                    if (!interaction.client.embedDrafts) {
-                        interaction.client.embedDrafts =
-                            new Map();
-                    }
+                    const current =
+                        embedBuilders.get(
+                            interaction.user.id
+                        ) || {};
 
-                    const title =
+                    current.title =
                         interaction.fields.getTextInputValue(
                             "embed_title"
                         );
 
-                    const description =
+                    current.description =
                         interaction.fields.getTextInputValue(
                             "embed_description"
                         );
 
-                    const webhookName =
+                    current.webhookName =
                         interaction.fields.getTextInputValue(
                             "webhook_name"
-                        ) ||
-                        "Server Listings";
-
-                    const buttonLabel =
-                        interaction.fields.getTextInputValue(
-                            "button_label"
                         );
 
-                    const buttonUrl =
-                        interaction.fields.getTextInputValue(
-                            "button_url"
-                        );
-
-                    const footer =
-                        interaction.fields.getTextInputValue(
-                            "embed_footer"
-                        );
-
-                    interaction.client.embedDrafts.set(
+                    embedBuilders.set(
                         interaction.user.id,
-                        {
-                            title,
-                            description,
-                            webhookName,
-                            buttonLabel,
-                            buttonUrl,
-                            footer,
-                            channelId:
-                                interaction.channel.id
-                        }
+                        current
                     );
 
                     return interaction.reply({
-                        embeds: [
-                            createEmbed(
-                                "Embed Preview",
-                                "Review your webhook embed below before sending it."
-                            ),
-                            new EmbedBuilder()
-                                .setColor(BRAND_COLOUR)
-                                .setTitle(title)
-                                .setDescription(description)
-                                .setFooter({
-                                    text:
-                                        footer ||
-                                        "No footer"
-                                })
-                        ],
-                        components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "embed_send"
-                                        )
-                                        .setLabel(
-                                            "Send"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Success
-                                        ),
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "embed_edit"
-                                        )
-                                        .setLabel(
-                                            "Edit"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Primary
-                                        ),
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            "embed_cancel"
-                                        )
-                                        .setLabel(
-                                            "Cancel"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                )
-                        ],
+                        content:
+                            "Embed details saved. Use the embed builder buttons to choose a channel, configure a button, or send it.",
                         ephemeral: true
                     });
                 }
 
+                // ----------------------------------------------
+                // BUTTON SETTINGS
+                // ----------------------------------------------
+
+                if (
+                    interaction.customId ===
+                    "embed_button_modal"
+                ) {
+
+                    const current =
+                        embedBuilders.get(
+                            interaction.user.id
+                        ) || {};
+
+                    current.buttonEnabled =
+                        true;
+
+                    current.buttonLabel =
+                        interaction.fields.getTextInputValue(
+                            "button_label"
+                        );
+
+                    current.buttonUrl =
+                        interaction.fields.getTextInputValue(
+                            "button_url"
+                        );
+
+                    embedBuilders.set(
+                        interaction.user.id,
+                        current
+                    );
+
+                    return interaction.reply({
+                        content:
+                            "Button settings saved.",
+                        ephemeral: true
+                    });
+                }
+
+                // ----------------------------------------------
                 // SERVER SUBMISSION
+                // ----------------------------------------------
+
                 if (
                     interaction.customId ===
                     "server_submission_modal"
@@ -2560,14 +3571,9 @@ client.on(
                             "server_description"
                         );
 
-                    const rawInvite =
+                    const invite =
                         interaction.fields.getTextInputValue(
                             "server_invite"
-                        );
-
-                    const invite =
-                        normaliseInvite(
-                            rawInvite
                         );
 
                     const category =
@@ -2580,19 +3586,11 @@ client.on(
                             "server_owner"
                         );
 
-                    if (!invite) {
-                        return interaction.reply({
-                            content:
-                                "Please provide a valid Discord invite.",
-                            ephemeral: true
-                        });
-                    }
-
-                    const id =
-                        `${interaction.user.id}-${Date.now()}`;
+                    const submissionId =
+                        makeId();
 
                     submissions.set(
-                        id,
+                        submissionId,
                         {
                             userId:
                                 interaction.user.id,
@@ -2617,24 +3615,33 @@ client.on(
                         );
 
                     if (!staffRole) {
-                        submissions.delete(id);
-
                         return interaction.reply({
                             content:
-                                "Submission staff role is not configured correctly.",
+                                "The submission staff role is not configured correctly.",
                             ephemeral: true
                         });
                     }
 
+                    const categoryChannel =
+                        cfg.submitReviewCategoryId
+                            ? interaction.guild.channels.cache.get(
+                                  cfg.submitReviewCategoryId
+                              )
+                            : null;
+
                     const reviewChannel =
                         await interaction.guild.channels.create({
                             name:
-                                `review-${safeName(serverName)}`,
+                                `review-${safeChannelName(
+                                    serverName
+                                )}`,
                             type:
                                 ChannelType.GuildText,
                             parent:
-                                cfg.submitReviewCategoryId ||
-                                undefined,
+                                categoryChannel?.type ===
+                                ChannelType.GuildCategory
+                                    ? categoryChannel.id
+                                    : undefined,
                             permissionOverwrites: [
                                 {
                                     id:
@@ -2665,11 +3672,37 @@ client.on(
                             ]
                         });
 
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        `submission_accept_${submissionId}`
+                                    )
+                                    .setLabel(
+                                        "Accept"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Success
+                                    ),
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        `submission_deny_${submissionId}`
+                                    )
+                                    .setLabel(
+                                        "Deny"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Danger
+                                    )
+                            );
+
                     const reviewEmbed =
                         createEmbed(
                             "New Server Submission",
-                            `A server has been submitted for manual verification.\n\n**Submitted by:** <@${interaction.user.id}>`
-                        ).addFields(
+                            "A server has been submitted for manual verification."
+                        )
+                        .addFields(
                             {
                                 name:
                                     "Server Name",
@@ -2696,6 +3729,12 @@ client.on(
                             },
                             {
                                 name:
+                                    "Submitter",
+                                value:
+                                    `<@${interaction.user.id}>`
+                            },
+                            {
+                                name:
                                     "Submitter's Role",
                                 value:
                                     owner
@@ -2709,29 +3748,7 @@ client.on(
                             reviewEmbed
                         ],
                         components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            `submission_accept_${id}`
-                                        )
-                                        .setLabel(
-                                            "Accept"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Success
-                                        ),
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            `submission_deny_${id}`
-                                        )
-                                        .setLabel(
-                                            "Deny"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                ]
+                            row
                         ]
                     });
 
@@ -2739,21 +3756,28 @@ client.on(
                         embeds: [
                             createEmbed(
                                 "Submission Received",
-                                "Your server has been submitted successfully.\n\nOur staff team will manually review it and you will receive a DM when a decision has been made."
+                                "Your server has been submitted successfully.\n\nOur staff team will manually review it. You will receive a DM when a decision has been made."
                             )
                         ],
                         ephemeral: true
                     });
                 }
 
-                // DENY SUBMISSION
+                // ----------------------------------------------
+                // DENIAL
+                // ----------------------------------------------
+
                 if (
                     interaction.customId.startsWith(
                         "submission_deny_modal_"
                     )
                 ) {
 
-                    if (!isStaff(interaction.member)) {
+                    if (
+                        !isStaff(
+                            interaction.member
+                        )
+                    ) {
                         return interaction.reply({
                             content:
                                 "Only staff can deny submissions.",
@@ -2761,14 +3785,16 @@ client.on(
                         });
                     }
 
-                    const id =
+                    const submissionId =
                         interaction.customId.replace(
                             "submission_deny_modal_",
                             ""
                         );
 
                     const submission =
-                        submissions.get(id);
+                        submissions.get(
+                            submissionId
+                        );
 
                     if (!submission) {
                         return interaction.reply({
@@ -2784,13 +3810,14 @@ client.on(
                         );
 
                     const applicant =
-                        await client.users
-                            .fetch(
-                                submission.userId
-                            )
-                            .catch(() => null);
+                        await client.users.fetch(
+                            submission.userId
+                        ).catch(
+                            () => null
+                        );
 
                     if (applicant) {
+
                         await applicant.send({
                             embeds: [
                                 createEmbed(
@@ -2798,109 +3825,63 @@ client.on(
                                     `Your server **${submission.serverName}** was not approved.\n\n**Reason:** ${reason}`
                                 )
                             ]
-                        }).catch(() => {});
-                    }
-
-                    const cfg =
-                        getGuildConfig(
-                            interaction.guild.id
+                        }).catch(
+                            () => {}
                         );
-
-                    // Post denial result to community channel
-                    if (cfg.verifiedChannelId) {
-
-                        const channel =
-                            interaction.guild.channels.cache.get(
-                                cfg.verifiedChannelId
-                            );
-
-                        if (channel) {
-
-                            const webhook =
-                                await getBotWebhook(
-                                    channel,
-                                    "Server Listing"
-                                );
-
-                            if (webhook) {
-
-                                const denied =
-                                    new EmbedBuilder()
-                                        .setColor(
-                                            BRAND_COLOUR
-                                        )
-                                        .setTitle(
-                                            `${LOGO} Server Submission`
-                                        )
-                                        .setDescription(
-                                            `A server submission has been denied.`
-                                        )
-                                        .addFields(
-                                            {
-                                                name:
-                                                    "Server",
-                                                value:
-                                                    submission.serverName,
-                                                inline: true
-                                            },
-                                            {
-                                                name:
-                                                    "Status",
-                                                value:
-                                                    "Denied",
-                                                inline: true
-                                            },
-                                            {
-                                                name:
-                                                    "Reason",
-                                                value:
-                                                    reason
-                                            }
-                                        )
-                                        .setTimestamp();
-
-                                await webhook.send({
-                                    username:
-                                        "Server Listing",
-                                    avatarURL:
-                                        client.user.displayAvatarURL(),
-                                    embeds: [
-                                        denied
-                                    ]
-                                }).catch(() => {});
-                            }
-                        }
                     }
 
-                    await interaction.reply({
+                    await interaction.channel.send({
                         embeds: [
                             createEmbed(
                                 "Submission Denied",
-                                `This submission has been denied by ${interaction.user}.\n\n**Reason:** ${reason}\n\nThe review channel will now close.`
+                                `**${submission.serverName}** has been denied by ${interaction.user}.\n\n**Reason:** ${reason}`
                             )
                         ]
+                    }).catch(
+                        () => {}
+                    );
+
+                    await interaction.reply({
+                        content:
+                            "The submitter has been notified. This review channel will now be deleted.",
+                        ephemeral: true
                     });
 
-                    submissions.delete(id);
+                    submissions.delete(
+                        submissionId
+                    );
 
-                    setTimeout(() => {
-                        interaction.channel
-                            .delete()
-                            .catch(() => {});
-                    }, 3000);
+                    setTimeout(
+                        () => {
+                            interaction.channel
+                                .delete()
+                                .catch(
+                                    () => {}
+                                );
+                        },
+                        3000
+                    );
 
                     return;
                 }
 
-                // REPORT
+                // ----------------------------------------------
+                // SERVER REPORT
+                // ----------------------------------------------
+
                 if (
                     interaction.customId ===
                     "server_report_modal"
                 ) {
 
-                    const reportedServer =
+                    const serverName =
                         interaction.fields.getTextInputValue(
-                            "reported_server"
+                            "report_server_name"
+                        );
+
+                    const serverId =
+                        interaction.fields.getTextInputValue(
+                            "report_server_id"
                         );
 
                     const reason =
@@ -2921,22 +3902,31 @@ client.on(
                     if (!staffRole) {
                         return interaction.reply({
                             content:
-                                "Report staff role is not configured.",
+                                "The report system has not been configured correctly.",
                             ephemeral: true
                         });
                     }
 
-                    const channel =
+                    const category =
+                        cfg.reportCategoryId
+                            ? interaction.guild.channels.cache.get(
+                                  cfg.reportCategoryId
+                              )
+                            : null;
+
+                    const reportChannel =
                         await interaction.guild.channels.create({
                             name:
-                                `server-reports-${safeName(
+                                `server-reports-${safeChannelName(
                                     interaction.user.username
                                 )}`,
                             type:
                                 ChannelType.GuildText,
                             parent:
-                                cfg.reportCategoryId ||
-                                undefined,
+                                category?.type ===
+                                ChannelType.GuildCategory
+                                    ? category.id
+                                    : undefined,
                             permissionOverwrites: [
                                 {
                                     id:
@@ -2977,48 +3967,63 @@ client.on(
                             ]
                         });
 
-                    await channel.send({
+                    const row =
+                        new ActionRowBuilder()
+                            .addComponents(
+                                new ButtonBuilder()
+                                    .setCustomId(
+                                        "close_report"
+                                    )
+                                    .setLabel(
+                                        "Close Report"
+                                    )
+                                    .setStyle(
+                                        ButtonStyle.Danger
+                                    )
+                            );
+
+                    await reportChannel.send({
                         content:
-                            `${staffRole}`,
+                            `${staffRole} ${interaction.user}`,
                         embeds: [
                             createEmbed(
                                 "Server Report",
-                                `A server has been reported by ${interaction.user}.`
+                                "A server has been reported."
                             ).addFields(
                                 {
                                     name:
                                         "Reported Server",
                                     value:
-                                        reportedServer
+                                        serverName
+                                },
+                                {
+                                    name:
+                                        "Server ID / Invite",
+                                    value:
+                                        serverId
                                 },
                                 {
                                     name:
                                         "Reason",
                                     value:
                                         reason
+                                },
+                                {
+                                    name:
+                                        "Reported By",
+                                    value:
+                                        `<@${interaction.user.id}>`
                                 }
                             )
                         ],
                         components: [
-                            new ActionRowBuilder()
-                                .addComponents(
-                                    new ButtonBuilder()
-                                        .setCustomId(
-                                            `close_report_${interaction.user.id}`
-                                        )
-                                        .setLabel(
-                                            "Close Report"
-                                        )
-                                        .setStyle(
-                                            ButtonStyle.Danger
-                                        )
-                                )
+                            row
                         ]
                     });
 
                     return interaction.reply({
                         content:
-                            `Your report has been submitted: ${channel}`,
+                            `Your report has been submitted: ${reportChannel}`,
                         ephemeral: true
                     });
                 }
@@ -3032,202 +4037,40 @@ client.on(
             );
 
             try {
+
                 if (
                     interaction.replied ||
                     interaction.deferred
                 ) {
+
                     await interaction.followUp({
                         content:
                             "Something went wrong while processing that action.",
                         ephemeral: true
                     });
+
                 } else {
+
                     await interaction.reply({
                         content:
                             "Something went wrong while processing that action.",
                         ephemeral: true
                     });
                 }
+
             } catch {}
         }
     }
 );
 
 // ============================================================
-// EMBED BUILDER
-// ============================================================
-
-if (!client.embedDrafts) {
-    client.embedDrafts = new Map();
-}
-
-function showEmbedModal(interaction) {
-
-    const modal =
-        new ModalBuilder()
-            .setCustomId(
-                "embed_builder_modal"
-            )
-            .setTitle(
-                "Webhook Embed Builder"
-            );
-
-    modal.addComponents(
-        new ActionRowBuilder()
-            .addComponents(
-                new TextInputBuilder()
-                    .setCustomId(
-                        "embed_title"
-                    )
-                    .setLabel(
-                        "Embed Title"
-                    )
-                    .setStyle(
-                        TextInputStyle.Short
-                    )
-                    .setRequired(true)
-                    .setMaxLength(256)
-            ),
-        new ActionRowBuilder()
-            .addComponents(
-                new TextInputBuilder()
-                    .setCustomId(
-                        "embed_description"
-                    )
-                    .setLabel(
-                        "Embed Description"
-                    )
-                    .setStyle(
-                        TextInputStyle.Paragraph
-                    )
-                    .setRequired(true)
-                    .setMaxLength(4000)
-            ),
-        new ActionRowBuilder()
-            .addComponents(
-                new TextInputBuilder()
-                    .setCustomId(
-                        "webhook_name"
-                    )
-                    .setLabel(
-                        "Webhook Name"
-                    )
-                    .setStyle(
-                        TextInputStyle.Short
-                    )
-                    .setRequired(false)
-                    .setValue(
-                        "Server Listing"
-                    )
-                    .setMaxLength(80)
-            ),
-        new ActionRowBuilder()
-            .addComponents(
-                new TextInputBuilder()
-                    .setCustomId(
-                        "button_label"
-                    )
-                    .setLabel(
-                        "Button Name"
-                    )
-                    .setStyle(
-                        TextInputStyle.Short
-                    )
-                    .setRequired(false)
-                    .setValue(
-                        "Join Server!"
-                    )
-                    .setMaxLength(80)
-            ),
-        new ActionRowBuilder()
-            .addComponents(
-                new TextInputBuilder()
-                    .setCustomId(
-                        "button_url"
-                    )
-                    .setLabel(
-                        "Button URL"
-                    )
-                    .setStyle(
-                        TextInputStyle.Short
-                    )
-                    .setRequired(false)
-                    .setPlaceholder(
-                        "https://discord.gg/example"
-                    )
-            )
-    );
-
-    return interaction.showModal(
-        modal
-    );
-}
-
-function showEmbedBuilder(interaction) {
-
-    const row =
-        new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(
-                        "embed_edit"
-                    )
-                    .setLabel(
-                        "Create / Edit Embed"
-                    )
-                    .setStyle(
-                        ButtonStyle.Primary
-                    ),
-                new ButtonBuilder()
-                    .setCustomId(
-                        "embed_send"
-                    )
-                    .setLabel(
-                        "Send"
-                    )
-                    .setStyle(
-                        ButtonStyle.Success
-                    ),
-                new ButtonBuilder()
-                    .setCustomId(
-                        "embed_cancel"
-                    )
-                    .setLabel(
-                        "Cancel"
-                    )
-                    .setStyle(
-                        ButtonStyle.Danger
-                    )
-            );
-
-    return interaction.reply({
-        embeds: [
-            createEmbed(
-                "Webhook Embed Builder",
-                "Create a webhook message below.\n\n" +
-                "The webhook is created automatically in the current channel.\n\n" +
-                "**Available options:**\n" +
-                "• Embed title\n" +
-                "• Description\n" +
-                "• Webhook name\n" +
-                "• Button name\n" +
-                "• Button URL\n" +
-                "• Footer"
-            )
-        ],
-        components: [row],
-        ephemeral: true
-    });
-}
-
-// ============================================================
-// SELECT HELPERS
+// SELECT MENU HELPERS
 // ============================================================
 
 async function roleSelect(
     interaction,
     customId,
-    content
+    placeholder
 ) {
 
     const roles =
@@ -3239,32 +4082,36 @@ async function roleSelect(
             )
             .first(25);
 
-    if (!roles.length) {
-        return interaction.reply({
-            content:
-                "No roles are available.",
-            ephemeral: true
-        });
-    }
-
     const menu =
         new StringSelectMenuBuilder()
-            .setCustomId(customId)
-            .setPlaceholder("Select a role")
+            .setCustomId(
+                customId
+            )
+            .setPlaceholder(
+                placeholder
+            )
             .addOptions(
-                roles.map(role => ({
-                    label:
-                        role.name.substring(0, 100),
-                    value:
-                        role.id
-                }))
+                roles.map(
+                    role => ({
+                        label:
+                            role.name.substring(
+                                0,
+                                100
+                            ),
+                        value:
+                            role.id
+                    })
+                )
             );
 
     return interaction.reply({
-        content,
+        content:
+            placeholder,
         components: [
             new ActionRowBuilder()
-                .addComponents(menu)
+                .addComponents(
+                    menu
+                )
         ],
         ephemeral: true
     });
@@ -3273,7 +4120,7 @@ async function roleSelect(
 async function categorySelect(
     interaction,
     customId,
-    content
+    placeholder
 ) {
 
     const categories =
@@ -3285,32 +4132,46 @@ async function categorySelect(
             )
             .first(25);
 
-    if (!categories.length) {
+    if (
+        !categories.size
+    ) {
         return interaction.reply({
             content:
-                "No categories are available.",
+                "No categories found.",
             ephemeral: true
         });
     }
 
     const menu =
         new StringSelectMenuBuilder()
-            .setCustomId(customId)
-            .setPlaceholder("Select a category")
+            .setCustomId(
+                customId
+            )
+            .setPlaceholder(
+                placeholder
+            )
             .addOptions(
-                categories.map(category => ({
-                    label:
-                        category.name.substring(0, 100),
-                    value:
-                        category.id
-                }))
+                categories.map(
+                    category => ({
+                        label:
+                            category.name.substring(
+                                0,
+                                100
+                            ),
+                        value:
+                            category.id
+                    })
+                )
             );
 
     return interaction.reply({
-        content,
+        content:
+            placeholder,
         components: [
             new ActionRowBuilder()
-                .addComponents(menu)
+                .addComponents(
+                    menu
+                )
         ],
         ephemeral: true
     });
@@ -3319,7 +4180,7 @@ async function categorySelect(
 async function channelSelect(
     interaction,
     customId,
-    content
+    placeholder
 ) {
 
     const channels =
@@ -3331,35 +4192,175 @@ async function channelSelect(
             )
             .first(25);
 
-    if (!channels.length) {
+    if (
+        !channels.size
+    ) {
         return interaction.reply({
             content:
-                "No text channels are available.",
+                "No text channels found.",
             ephemeral: true
         });
     }
 
     const menu =
         new StringSelectMenuBuilder()
-            .setCustomId(customId)
-            .setPlaceholder("Select a channel")
+            .setCustomId(
+                customId
+            )
+            .setPlaceholder(
+                placeholder
+            )
             .addOptions(
-                channels.map(channel => ({
-                    label:
-                        channel.name.substring(0, 100),
-                    value:
-                        channel.id
-                }))
+                channels.map(
+                    channel => ({
+                        label:
+                            channel.name.substring(
+                                0,
+                                100
+                            ),
+                        value:
+                            channel.id
+                    })
+                )
             );
 
     return interaction.reply({
-        content,
+        content:
+            placeholder,
         components: [
             new ActionRowBuilder()
-                .addComponents(menu)
+                .addComponents(
+                    menu
+                )
         ],
         ephemeral: true
     });
+}
+
+// ============================================================
+// EMBED BUILDER
+// ============================================================
+
+function buildEmbedBuilderMessage(
+    current = {}
+) {
+
+    const embed =
+        createEmbed(
+            "Webhook Embed Builder",
+            "Build your webhook message below. The message will be sent using a real Discord webhook."
+        ).addFields(
+            {
+                name:
+                    "Title",
+                value:
+                    current.title ||
+                    "Not set",
+                inline: true
+            },
+            {
+                name:
+                    "Channel",
+                value:
+                    current.channelId
+                        ? `<#${current.channelId}>`
+                        : "Not set",
+                inline: true
+            },
+            {
+                name:
+                    "Webhook Name",
+                value:
+                    current.webhookName ||
+                    "Server Listing",
+                inline: true
+            },
+            {
+                name:
+                    "Button",
+                value:
+                    current.buttonEnabled &&
+                    current.buttonUrl
+                        ? `${current.buttonLabel || "Join Server!"} → ${current.buttonUrl}`
+                        : "Disabled",
+                inline: false
+            }
+        );
+
+    const row1 =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_edit"
+                    )
+                    .setLabel(
+                        "Edit Embed"
+                    )
+                    .setStyle(
+                        ButtonStyle.Primary
+                    ),
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_channel"
+                    )
+                    .setLabel(
+                        "Channel"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    ),
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_button_settings"
+                    )
+                    .setLabel(
+                        "Button"
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    )
+            );
+
+    const row2 =
+        new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId(
+                        "embed_send"
+                    )
+                    .setLabel(
+                        "Send"
+                    )
+                    .setStyle(
+                        ButtonStyle.Success
+                    )
+            );
+
+    return {
+        embeds: [
+            embed
+        ],
+        components: [
+            row1,
+            row2
+        ],
+        ephemeral: true
+    };
+}
+
+async function sendEmbedBuilder(
+    interaction
+) {
+
+    embedBuilders.set(
+        interaction.user.id,
+        {}
+    );
+
+    return interaction.reply(
+        buildEmbedBuilderMessage({})
+    );
 }
 
 // ============================================================
@@ -3378,64 +4379,57 @@ async function sendTicketConfigPanel(
 
     const staff =
         cfg.ticketStaffRoleId
-            ? interaction.guild.roles.cache.get(
-                cfg.ticketStaffRoleId
-            )
-            : null;
+            ? `<@&${cfg.ticketStaffRoleId}>`
+            : "Not configured";
 
     const category =
         cfg.ticketCategoryId
-            ? interaction.guild.channels.cache.get(
-                cfg.ticketCategoryId
-            )
-            : null;
+            ? `<#${cfg.ticketCategoryId}>`
+            : "Not configured";
 
     const logs =
-        cfg.ticketLogChannelId
-            ? interaction.guild.channels.cache.get(
-                cfg.ticketLogChannelId
-            )
-            : null;
+        cfg.ticketLogsChannelId
+            ? `<#${cfg.ticketLogsChannelId}>`
+            : "Not configured";
 
     const embed =
         createEmbed(
             "Ticket Configuration",
-            "Configure the complete ticket system."
+            "Configure the ticket system below."
         ).addFields(
             {
-                name: "Staff Role",
+                name:
+                    "Staff Role",
                 value:
-                    staff
-                        ? `${staff}`
-                        : "Not configured",
+                    staff,
                 inline: true
             },
             {
-                name: "Category",
+                name:
+                    "Ticket Category",
                 value:
-                    category
-                        ? `${category}`
-                        : "Not configured",
+                    category,
                 inline: true
             },
             {
-                name: "Ticket Logs",
+                name:
+                    "Ticket Logs",
                 value:
-                    logs
-                        ? `${logs}`
-                        : "Not configured",
+                    logs,
                 inline: true
             }
         );
 
-    const rows = [
+    const row1 =
         new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(
                         "ticket_set_staff"
                     )
-                    .setLabel("Staff Role")
+                    .setLabel(
+                        "Staff Role"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     ),
@@ -3443,7 +4437,9 @@ async function sendTicketConfigPanel(
                     .setCustomId(
                         "ticket_set_category"
                     )
-                    .setLabel("Category")
+                    .setLabel(
+                        "Category"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     ),
@@ -3451,18 +4447,24 @@ async function sendTicketConfigPanel(
                     .setCustomId(
                         "ticket_set_logs"
                     )
-                    .setLabel("Ticket Logs")
+                    .setLabel(
+                        "Ticket Logs"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     )
-            ),
+            );
+
+    const row2 =
         new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(
                         "ticket_send_panel"
                     )
-                    .setLabel("Send Panel")
+                    .setLabel(
+                        "Send Panel"
+                    )
                     .setStyle(
                         ButtonStyle.Success
                     ),
@@ -3470,25 +4472,34 @@ async function sendTicketConfigPanel(
                     .setCustomId(
                         "ticket_refresh"
                     )
-                    .setLabel("Refresh")
+                    .setLabel(
+                        "Refresh"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     )
-            )
-    ];
+            );
+
+    const response = {
+        embeds: [
+            embed
+        ],
+        components: [
+            row1,
+            row2
+        ],
+        ephemeral: true
+    };
 
     if (edit) {
-        return interaction.update({
-            embeds: [embed],
-            components: rows
-        });
+        return interaction.editReply(
+            response
+        );
     }
 
-    return interaction.reply({
-        embeds: [embed],
-        components: rows,
-        ephemeral: true
-    });
+    return interaction.reply(
+        response
+    );
 }
 
 // ============================================================
@@ -3505,88 +4516,66 @@ async function sendSubmitConfigPanel(
             interaction.guild.id
         );
 
-    const staff =
-        cfg.submitStaffRoleId
-            ? interaction.guild.roles.cache.get(
-                cfg.submitStaffRoleId
-            )
-            : null;
-
-    const review =
-        cfg.submitReviewCategoryId
-            ? interaction.guild.channels.cache.get(
-                cfg.submitReviewCategoryId
-            )
-            : null;
-
-    const verified =
-        cfg.verifiedChannelId
-            ? interaction.guild.channels.cache.get(
-                cfg.verifiedChannelId
-            )
-            : null;
-
-    const verifiedRole =
-        cfg.verifiedRoleId
-            ? interaction.guild.roles.cache.get(
-                cfg.verifiedRoleId
-            )
-            : null;
-
     const embed =
         createEmbed(
             "Server Submission Configuration",
-            "Configure how server submissions are reviewed and listed."
+            "Configure your manual server verification system."
         ).addFields(
             {
-                name: "Submission Staff",
+                name:
+                    "Submission Staff",
                 value:
-                    staff
-                        ? `${staff}`
+                    cfg.submitStaffRoleId
+                        ? `<@&${cfg.submitStaffRoleId}>`
                         : "Not configured",
                 inline: true
             },
             {
-                name: "Review Category",
+                name:
+                    "Review Category",
                 value:
-                    review
-                        ? `${review}`
+                    cfg.submitReviewCategoryId
+                        ? `<#${cfg.submitReviewCategoryId}>`
                         : "Not configured",
                 inline: true
             },
             {
-                name: "Community Channel",
+                name:
+                    "Community Channel",
                 value:
-                    verified
-                        ? `${verified}`
+                    cfg.verifiedChannelId
+                        ? `<#${cfg.verifiedChannelId}>`
                         : "Not configured",
                 inline: true
             },
             {
-                name: "Verified Role",
+                name:
+                    "Verified Role",
                 value:
-                    verifiedRole
-                        ? `${verifiedRole}`
+                    cfg.verifiedRoleId
+                        ? `<@&${cfg.verifiedRoleId}>`
                         : "Not configured",
                 inline: true
             },
             {
-                name: "Approval System",
+                name:
+                    "Process",
                 value:
-                    "Accept → Server Listing webhook + Join Server button → review channel closes.\n\n" +
-                    "Deny → DM applicant + denial result → review channel closes.",
+                    "Submit → Private review channel → Accept/Deny → Listing posted by webhook → Review channel deleted.",
                 inline: false
             }
         );
 
-    const rows = [
+    const row1 =
         new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(
                         "submit_set_staff"
                     )
-                    .setLabel("Staff Role")
+                    .setLabel(
+                        "Staff Role"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     ),
@@ -3594,7 +4583,9 @@ async function sendSubmitConfigPanel(
                     .setCustomId(
                         "submit_set_review"
                     )
-                    .setLabel("Review Category")
+                    .setLabel(
+                        "Review Category"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     ),
@@ -3602,18 +4593,24 @@ async function sendSubmitConfigPanel(
                     .setCustomId(
                         "submit_set_verified"
                     )
-                    .setLabel("Community Channel")
+                    .setLabel(
+                        "Community Channel"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     )
-            ),
+            );
+
+    const row2 =
         new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(
                         "submit_set_verified_role"
                     )
-                    .setLabel("Verified Role")
+                    .setLabel(
+                        "Verified Role"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     ),
@@ -3621,7 +4618,9 @@ async function sendSubmitConfigPanel(
                     .setCustomId(
                         "submit_send_panel"
                     )
-                    .setLabel("Send Panel")
+                    .setLabel(
+                        "Send Panel"
+                    )
                     .setStyle(
                         ButtonStyle.Success
                     ),
@@ -3629,25 +4628,34 @@ async function sendSubmitConfigPanel(
                     .setCustomId(
                         "submit_refresh"
                     )
-                    .setLabel("Refresh")
+                    .setLabel(
+                        "Refresh"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     )
-            )
-    ];
+            );
+
+    const response = {
+        embeds: [
+            embed
+        ],
+        components: [
+            row1,
+            row2
+        ],
+        ephemeral: true
+    };
 
     if (edit) {
-        return interaction.update({
-            embeds: [embed],
-            components: rows
-        });
+        return interaction.editReply(
+            response
+        );
     }
 
-    return interaction.reply({
-        embeds: [embed],
-        components: rows,
-        ephemeral: true
-    });
+    return interaction.reply(
+        response
+    );
 }
 
 // ============================================================
@@ -3664,57 +4672,48 @@ async function sendReportConfigPanel(
             interaction.guild.id
         );
 
-    const staff =
-        cfg.reportStaffRoleId
-            ? interaction.guild.roles.cache.get(
-                cfg.reportStaffRoleId
-            )
-            : null;
-
-    const category =
-        cfg.reportCategoryId
-            ? interaction.guild.channels.cache.get(
-                cfg.reportCategoryId
-            )
-            : null;
-
     const embed =
         createEmbed(
             "Server Report Configuration",
-            "Configure where server reports are created and who can handle them."
+            "Configure the server reporting system."
         ).addFields(
             {
-                name: "Report Staff",
+                name:
+                    "Report Staff",
                 value:
-                    staff
-                        ? `${staff}`
+                    cfg.reportStaffRoleId
+                        ? `<@&${cfg.reportStaffRoleId}>`
                         : "Not configured",
                 inline: true
             },
             {
-                name: "Report Category",
+                name:
+                    "Report Category",
                 value:
-                    category
-                        ? `${category}`
+                    cfg.reportCategoryId
+                        ? `<#${cfg.reportCategoryId}>`
                         : "Not configured",
                 inline: true
             },
             {
-                name: "Report Channels",
+                name:
+                    "Report Tickets",
                 value:
-                    "Reports are automatically named:\n`server-reports-{user}`",
+                    "`server-reports-{user}`",
                 inline: false
             }
         );
 
-    const rows = [
+    const row =
         new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(
                         "report_set_staff"
                     )
-                    .setLabel("Staff Role")
+                    .setLabel(
+                        "Staff Role"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     ),
@@ -3722,95 +4721,15 @@ async function sendReportConfigPanel(
                     .setCustomId(
                         "report_set_category"
                     )
-                    .setLabel("Category")
+                    .setLabel(
+                        "Report Category"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     ),
                 new ButtonBuilder()
                     .setCustomId(
                         "report_send_panel"
-                    )
-                    .setLabel("Send Panel")
-                    .setStyle(
-                        ButtonStyle.Success
-                    )
-            ),
-        new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(
-                        "report_refresh"
-                    )
-                    .setLabel("Refresh")
-                    .setStyle(
-                        ButtonStyle.Secondary
-                    )
-            )
-    ];
-
-    if (edit) {
-        return interaction.update({
-            embeds: [embed],
-            components: rows
-        });
-    }
-
-    return interaction.reply({
-        embeds: [embed],
-        components: rows,
-        ephemeral: true
-    });
-}
-
-// ============================================================
-// VERIFICATION CONFIG
-// ============================================================
-
-async function sendVerificationPanel(
-    interaction,
-    edit = false
-) {
-
-    const cfg =
-        getGuildConfig(
-            interaction.guild.id
-        );
-
-    const role =
-        cfg.verificationRoleId
-            ? interaction.guild.roles.cache.get(
-                cfg.verificationRoleId
-            )
-            : null;
-
-    const embed =
-        createEmbed(
-            "Verification Configuration",
-            "Configure the member verification system."
-        ).addFields({
-            name: "Verification Role",
-            value:
-                role
-                    ? `${role}`
-                    : "Not configured"
-        });
-
-    const row =
-        new ActionRowBuilder()
-            .addComponents(
-                new ButtonBuilder()
-                    .setCustomId(
-                        "verification_set_role"
-                    )
-                    .setLabel(
-                        "Verification Role"
-                    )
-                    .setStyle(
-                        ButtonStyle.Primary
-                    ),
-                new ButtonBuilder()
-                    .setCustomId(
-                        "verification_send_panel"
                     )
                     .setLabel(
                         "Send Panel"
@@ -3820,7 +4739,7 @@ async function sendVerificationPanel(
                     ),
                 new ButtonBuilder()
                     .setCustomId(
-                        "verification_refresh"
+                        "report_refresh"
                     )
                     .setLabel(
                         "Refresh"
@@ -3830,94 +4749,121 @@ async function sendVerificationPanel(
                     )
             );
 
+    const response = {
+        embeds: [
+            embed
+        ],
+        components: [
+            row
+        ],
+        ephemeral: true
+    };
+
     if (edit) {
-        return interaction.update({
-            embeds: [embed],
-            components: [row]
-        });
+        return interaction.editReply(
+            response
+        );
     }
 
-    return interaction.reply({
-        embeds: [embed],
-        components: [row],
-        ephemeral: true
-    });
+    return interaction.reply(
+        response
+    );
 }
 
 // ============================================================
-// WELCOME SYSTEM
+// TICKET LOGGING
 // ============================================================
 
-client.on(
-    "guildMemberAdd",
-    async member => {
+async function sendTicketLog(
+    guild,
+    channel,
+    closer
+) {
 
-        try {
+    try {
 
-            const cfg =
-                getGuildConfig(
-                    member.guild.id
-                );
-
-            if (!cfg.welcomeChannelId) {
-                return;
-            }
-
-            const channel =
-                member.guild.channels.cache.get(
-                    cfg.welcomeChannelId
-                );
-
-            if (!channel) return;
-
-            // NO THUMBNAIL / NO USER PFP
-            const embed =
-                createEmbed(
-                    "Welcome!",
-                    `Welcome to **${member.guild.name}**, ${member}!\n\nWe're glad to have you here.`
-                );
-
-            await channel.send({
-                embeds: [embed]
-            });
-
-        } catch (error) {
-            console.error(
-                "Welcome error:",
-                error
+        const cfg =
+            getGuildConfig(
+                guild.id
             );
-        }
-    }
-);
-
-// ============================================================
-// CLEAN SUBMISSIONS
-// ============================================================
-
-setInterval(() => {
-
-    const now = Date.now();
-
-    for (
-        const [
-            id,
-            submission
-        ] of submissions.entries()
-    ) {
 
         if (
-            submission.createdAt &&
-            now - submission.createdAt >
-            24 * 60 * 60 * 1000
+            !cfg.ticketLogsChannelId
         ) {
-            submissions.delete(id);
+            return;
         }
-    }
 
-}, 30 * 60 * 1000);
+        const logChannel =
+            guild.channels.cache.get(
+                cfg.ticketLogsChannelId
+            );
+
+        if (!logChannel) {
+            return;
+        }
+
+        await logChannel.send({
+            embeds: [
+                createEmbed(
+                    "Ticket Closed",
+                    `**Channel:** #${channel.name}\n` +
+                    `**Closed by:** ${closer}\n` +
+                    `**Channel ID:** ${channel.id}`
+                )
+            ]
+        });
+
+    } catch (error) {
+
+        console.error(
+            "TICKET LOG ERROR:",
+            error
+        );
+    }
+}
+
+// ============================================================
+// CLEAN OLD SUBMISSIONS
+// ============================================================
+
+setInterval(
+    () => {
+
+        const now =
+            Date.now();
+
+        for (
+            const [
+                id,
+                submission
+            ] of submissions.entries()
+        ) {
+
+            if (
+                submission.createdAt &&
+                now -
+                    submission.createdAt >
+                    24 *
+                        60 *
+                        60 *
+                        1000
+            ) {
+                submissions.delete(
+                    id
+                );
+            }
+        }
+
+    },
+    30 *
+        60 *
+        1000
+);
 
 // ============================================================
 // LOGIN
 // ============================================================
 
-client.login(TOKEN);
+client.login(
+    TOKEN
+);
