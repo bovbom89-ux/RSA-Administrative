@@ -24,109 +24,106 @@ const client = new Client({
 
 const EMBED_COLOR = "#E75D2A";
 
-// ======================================================
+// =====================================================
+// EMBED
+// =====================================================
+
+function embed(title, description) {
+    return new EmbedBuilder()
+        .setColor(EMBED_COLOR)
+        .setTitle(title)
+        .setDescription(description);
+}
+
+// =====================================================
 // COMMANDS
-// ======================================================
+// =====================================================
 
 const commands = [
+
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Permanently ban a member.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member to ban.")
                 .setRequired(true)
         )
-        .addStringOption(option =>
-            option
-                .setName("reason")
-                .setDescription("The reason for the ban.")
-                .setRequired(false)
+        .addStringOption(o =>
+            o.setName("reason")
+                .setDescription("Reason for the ban.")
         ),
 
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Unban a user.")
-        .addStringOption(option =>
-            option
-                .setName("userid")
-                .setDescription("The ID of the user to unban.")
+        .addStringOption(o =>
+            o.setName("userid")
+                .setDescription("The user's ID.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("kick")
         .setDescription("Remove a member from the server.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member to kick.")
                 .setRequired(true)
         )
-        .addStringOption(option =>
-            option
-                .setName("reason")
-                .setDescription("The reason for the kick.")
-                .setRequired(false)
+        .addStringOption(o =>
+            o.setName("reason")
+                .setDescription("Reason for the kick.")
         ),
 
     new SlashCommandBuilder()
         .setName("timeout")
-        .setDescription("Temporarily restrict a member.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .setDescription("Timeout a member.")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member to timeout.")
                 .setRequired(true)
         )
-        .addIntegerOption(option =>
-            option
-                .setName("minutes")
-                .setDescription("Timeout duration in minutes.")
+        .addIntegerOption(o =>
+            o.setName("minutes")
+                .setDescription("Timeout duration.")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(40320)
         )
-        .addStringOption(option =>
-            option
-                .setName("reason")
-                .setDescription("The reason for the timeout.")
-                .setRequired(false)
+        .addStringOption(o =>
+            o.setName("reason")
+                .setDescription("Reason for the timeout.")
         ),
 
     new SlashCommandBuilder()
         .setName("untimeout")
         .setDescription("Remove a member's timeout.")
-        .addUserOption(option =>
-            option
-                .setName("user")
-                .setDescription("The member to untimeout.")
+        .addUserOption(o =>
+            o.setName("user")
+                .setDescription("The member.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warn")
         .setDescription("Warn a member.")
-        .addUserOption(option =>
-            option
-                .setName("user")
-                .setDescription("The member to warn.")
+        .addUserOption(o =>
+            o.setName("user")
+                .setDescription("The member.")
                 .setRequired(true)
         )
-        .addStringOption(option =>
-            option
-                .setName("reason")
-                .setDescription("The reason for the warning.")
+        .addStringOption(o =>
+            o.setName("reason")
+                .setDescription("Reason for the warning.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
         .setDescription("View a member's warnings.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member.")
                 .setRequired(true)
         ),
@@ -134,9 +131,8 @@ const commands = [
     new SlashCommandBuilder()
         .setName("clearwarnings")
         .setDescription("Clear a member's warnings.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member.")
                 .setRequired(true)
         ),
@@ -144,10 +140,9 @@ const commands = [
     new SlashCommandBuilder()
         .setName("clear")
         .setDescription("Delete multiple messages.")
-        .addIntegerOption(option =>
-            option
-                .setName("amount")
-                .setDescription("Number of messages to delete.")
+        .addIntegerOption(o =>
+            o.setName("amount")
+                .setDescription("Number of messages.")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(100)
@@ -156,10 +151,9 @@ const commands = [
     new SlashCommandBuilder()
         .setName("purge")
         .setDescription("Delete recent messages.")
-        .addIntegerOption(option =>
-            option
-                .setName("amount")
-                .setDescription("Number of messages to delete.")
+        .addIntegerOption(o =>
+            o.setName("amount")
+                .setDescription("Number of messages.")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(100)
@@ -168,10 +162,9 @@ const commands = [
     new SlashCommandBuilder()
         .setName("slowmode")
         .setDescription("Set channel slowmode.")
-        .addIntegerOption(option =>
-            option
-                .setName("seconds")
-                .setDescription("Slowmode duration in seconds. Use 0 to disable.")
+        .addIntegerOption(o =>
+            o.setName("seconds")
+                .setDescription("Slowmode duration.")
                 .setRequired(true)
                 .setMinValue(0)
                 .setMaxValue(21600)
@@ -195,19 +188,19 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("automodconfig")
-        .setDescription("Configure Ghosty's AutoMod system."),
+        .setDescription("Configure Ghosty's AutoMod."),
 
     new SlashCommandBuilder()
         .setName("logs")
-        .setDescription("Configure Ghosty's logging system."),
+        .setDescription("Configure Ghosty's logging."),
 
     new SlashCommandBuilder()
         .setName("logsstatus")
-        .setDescription("View the current logging settings."),
+        .setDescription("View logging settings."),
 
     new SlashCommandBuilder()
         .setName("setup")
-        .setDescription("Set up Ghosty for this server."),
+        .setDescription("Set up Ghosty."),
 
     new SlashCommandBuilder()
         .setName("settings")
@@ -215,55 +208,48 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("userinfo")
-        .setDescription("View information about a member.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .setDescription("View member information.")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member.")
-                .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("View information about the server."),
+        .setDescription("View server information."),
 
     new SlashCommandBuilder()
         .setName("roleinfo")
-        .setDescription("View information about a role.")
-        .addRoleOption(option =>
-            option
-                .setName("role")
+        .setDescription("View role information.")
+        .addRoleOption(o =>
+            o.setName("role")
                 .setDescription("The role.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("channelinfo")
-        .setDescription("View information about a channel."),
+        .setDescription("View channel information."),
 
     new SlashCommandBuilder()
         .setName("avatar")
         .setDescription("View a member's avatar.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member.")
-                .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("banner")
         .setDescription("View a member's banner.")
-        .addUserOption(option =>
-            option
-                .setName("user")
+        .addUserOption(o =>
+            o.setName("user")
                 .setDescription("The member.")
-                .setRequired(false)
         ),
 
     new SlashCommandBuilder()
         .setName("staff")
-        .setDescription("Open the Ghosty staff panel."),
+        .setDescription("Open the staff panel."),
 
     new SlashCommandBuilder()
         .setName("modstats")
@@ -292,59 +278,57 @@ const commands = [
     new SlashCommandBuilder()
         .setName("support")
         .setDescription("Get the Ghosty support server.")
+
 ].map(command => command.toJSON());
 
-// ======================================================
-// EMBED FUNCTION
-// ======================================================
-
-function createEmbed(title, description) {
-    return new EmbedBuilder()
-        .setColor(EMBED_COLOR)
-        .setTitle(title)
-        .setDescription(description);
-}
-
-// ======================================================
+// =====================================================
 // REGISTER COMMANDS
-// ======================================================
+// =====================================================
 
 async function registerCommands() {
     try {
         console.log("Registering Ghosty commands...");
 
-        const rest = new REST({ version: "10" }).setToken(
-            process.env.DISCORD_TOKEN
-        );
+        // Gets the bot's application information using the token.
+        const application = await client.application.fetch();
+
+        const rest = new REST({ version: "10" })
+            .setToken(process.env.DISCORD_TOKEN);
 
         await rest.put(
-            Routes.applicationCommands(process.env.DISCORD_CLIENT_ID),
-            { body: commands }
+            Routes.applicationCommands(application.id),
+            {
+                body: commands
+            }
         );
 
-        console.log(`Registered ${commands.length} Ghosty commands.`);
+        console.log(`Successfully registered ${commands.length} commands.`);
     } catch (error) {
-        console.error("Command registration failed:", error);
+        console.error("Failed to register commands:", error);
     }
 }
 
-// ======================================================
+// =====================================================
 // READY
-// ======================================================
+// =====================================================
 
 client.once("ready", async () => {
+
     console.log(`Ghosty is online as ${client.user.tag}`);
     console.log(`Serving ${client.guilds.cache.size} server(s).`);
 
     await registerCommands();
+
 });
 
-// ======================================================
+// =====================================================
 // INTERACTIONS
-// ======================================================
+// =====================================================
 
 client.on("interactionCreate", async interaction => {
+
     try {
+
         if (interaction.isChatInputCommand()) {
             await handleCommand(interaction);
         }
@@ -352,13 +336,15 @@ client.on("interactionCreate", async interaction => {
         if (interaction.isButton()) {
             await handleButton(interaction);
         }
+
     } catch (error) {
+
         console.error(error);
 
-        const reply = {
+        const response = {
             embeds: [
-                createEmbed(
-                    "Something went wrong",
+                embed(
+                    "Something Went Wrong",
                     "Ghosty could not complete that action."
                 )
             ],
@@ -366,29 +352,32 @@ client.on("interactionCreate", async interaction => {
         };
 
         if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(reply).catch(() => {});
+            await interaction.followUp(response).catch(() => {});
         } else {
-            await interaction.reply(reply).catch(() => {});
+            await interaction.reply(response).catch(() => {});
         }
+
     }
+
 });
 
-// ======================================================
+// =====================================================
 // COMMAND HANDLER
-// ======================================================
+// =====================================================
 
 async function handleCommand(interaction) {
+
     const command = interaction.commandName;
 
-    // -------------------------------
     // BAN
-    // -------------------------------
-
     if (command === "ban") {
-        if (!interaction.memberPermissions.has(PermissionsBitField.Flags.BanMembers)) {
+
+        if (!interaction.memberPermissions.has(
+            PermissionsBitField.Flags.BanMembers
+        )) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Permission Denied",
                         "You need the Ban Members permission to use this command."
                     )
@@ -399,30 +388,19 @@ async function handleCommand(interaction) {
 
         const user = interaction.options.getUser("user");
         const reason =
-            interaction.options.getString("reason") || "No reason provided.";
+            interaction.options.getString("reason") ||
+            "No reason provided.";
 
         const member = await interaction.guild.members
             .fetch(user.id)
             .catch(() => null);
 
-        if (!member) {
+        if (!member || !member.bannable) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
-                        "Member Not Found",
-                        "That user is not currently in this server."
-                    )
-                ],
-                ephemeral: true
-            });
-        }
-
-        if (!member.bannable) {
-            return interaction.reply({
-                embeds: [
-                    createEmbed(
+                    embed(
                         "Unable to Ban",
-                        "Ghosty cannot ban that member. Check role hierarchy and permissions."
+                        "Ghosty cannot ban that member."
                     )
                 ],
                 ephemeral: true
@@ -433,7 +411,7 @@ async function handleCommand(interaction) {
 
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Member Banned",
                     `**User:** ${user}\n**Reason:** ${reason}`
                 )
@@ -442,15 +420,15 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // KICK
-    // -------------------------------
-
     if (command === "kick") {
-        if (!interaction.memberPermissions.has(PermissionsBitField.Flags.KickMembers)) {
+
+        if (!interaction.memberPermissions.has(
+            PermissionsBitField.Flags.KickMembers
+        )) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Permission Denied",
                         "You need the Kick Members permission to use this command."
                     )
@@ -461,7 +439,8 @@ async function handleCommand(interaction) {
 
         const user = interaction.options.getUser("user");
         const reason =
-            interaction.options.getString("reason") || "No reason provided.";
+            interaction.options.getString("reason") ||
+            "No reason provided.";
 
         const member = await interaction.guild.members
             .fetch(user.id)
@@ -470,7 +449,7 @@ async function handleCommand(interaction) {
         if (!member || !member.kickable) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Unable to Kick",
                         "Ghosty cannot kick that member."
                     )
@@ -483,7 +462,7 @@ async function handleCommand(interaction) {
 
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Member Kicked",
                     `**User:** ${user}\n**Reason:** ${reason}`
                 )
@@ -492,15 +471,15 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // TIMEOUT
-    // -------------------------------
-
     if (command === "timeout") {
-        if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+
+        if (!interaction.memberPermissions.has(
+            PermissionsBitField.Flags.ModerateMembers
+        )) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Permission Denied",
                         "You need the Moderate Members permission to use this command."
                     )
@@ -512,7 +491,8 @@ async function handleCommand(interaction) {
         const user = interaction.options.getUser("user");
         const minutes = interaction.options.getInteger("minutes");
         const reason =
-            interaction.options.getString("reason") || "No reason provided.";
+            interaction.options.getString("reason") ||
+            "No reason provided.";
 
         const member = await interaction.guild.members
             .fetch(user.id)
@@ -521,7 +501,7 @@ async function handleCommand(interaction) {
         if (!member || !member.moderatable) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Unable to Timeout",
                         "Ghosty cannot timeout that member."
                     )
@@ -530,11 +510,14 @@ async function handleCommand(interaction) {
             });
         }
 
-        await member.timeout(minutes * 60 * 1000, reason);
+        await member.timeout(
+            minutes * 60 * 1000,
+            reason
+        );
 
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Member Timed Out",
                     `**User:** ${user}\n**Duration:** ${minutes} minute(s)\n**Reason:** ${reason}`
                 )
@@ -543,15 +526,15 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // UNTIMEOUT
-    // -------------------------------
-
     if (command === "untimeout") {
-        if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+
+        if (!interaction.memberPermissions.has(
+            PermissionsBitField.Flags.ModerateMembers
+        )) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Permission Denied",
                         "You need the Moderate Members permission to use this command."
                     )
@@ -569,7 +552,7 @@ async function handleCommand(interaction) {
         if (!member || !member.moderatable) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Unable to Remove Timeout",
                         "Ghosty cannot modify that member."
                     )
@@ -582,7 +565,7 @@ async function handleCommand(interaction) {
 
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Timeout Removed",
                     `The timeout has been removed from **${user}**.`
                 )
@@ -591,15 +574,15 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // WARN
-    // -------------------------------
-
     if (command === "warn") {
-        if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ModerateMembers)) {
+
+        if (!interaction.memberPermissions.has(
+            PermissionsBitField.Flags.ModerateMembers
+        )) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Permission Denied",
                         "You need the Moderate Members permission to use this command."
                     )
@@ -613,7 +596,7 @@ async function handleCommand(interaction) {
 
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Member Warned",
                     `**User:** ${user}\n**Reason:** ${reason}`
                 )
@@ -622,15 +605,15 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // AUTOMOD CONFIG
-    // -------------------------------
-
     if (command === "automodconfig") {
-        if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
+
+        if (!interaction.memberPermissions.has(
+            PermissionsBitField.Flags.ManageGuild
+        )) {
             return interaction.reply({
                 embeds: [
-                    createEmbed(
+                    embed(
                         "Permission Denied",
                         "You need the Manage Server permission to configure AutoMod."
                     )
@@ -639,12 +622,18 @@ async function handleCommand(interaction) {
             });
         }
 
-        const embed = createEmbed(
+        const panel = embed(
             "Ghosty AutoMod",
-            "Configure Ghosty's automatic moderation system using the controls below.\n\n**Status:** Disabled\n**Spam Protection:** Enabled\n**Mention Protection:** Enabled\n**Invite Protection:** Enabled\n**Word Filter:** Enabled\n**Excessive Caps:** Disabled"
+            "**Status:** Disabled\n\n" +
+            "**Spam Protection:** Enabled\n" +
+            "**Mention Protection:** Enabled\n" +
+            "**Invite Protection:** Enabled\n" +
+            "**Word Filter:** Enabled\n" +
+            "**Excessive Caps:** Disabled"
         );
 
         const row = new ActionRowBuilder().addComponents(
+
             new ButtonBuilder()
                 .setCustomId("automod_enable")
                 .setLabel("Enable")
@@ -664,23 +653,22 @@ async function handleCommand(interaction) {
                 .setCustomId("automod_disable")
                 .setLabel("Disable")
                 .setStyle(ButtonStyle.Danger)
+
         );
 
         return interaction.reply({
-            embeds: [embed],
+            embeds: [panel],
             components: [row],
             ephemeral: true
         });
     }
 
-    // -------------------------------
     // PING
-    // -------------------------------
-
     if (command === "ping") {
+
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Ghosty Ping",
                     `Latency: **${client.ws.ping}ms**`
                 )
@@ -689,20 +677,22 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // UPTIME
-    // -------------------------------
-
     if (command === "uptime") {
-        const seconds = Math.floor(process.uptime());
 
-        const days = Math.floor(seconds / 86400);
-        const hours = Math.floor((seconds % 86400) / 3600);
-        const minutes = Math.floor((seconds % 3600) / 60);
+        const totalSeconds = Math.floor(process.uptime());
+
+        const days = Math.floor(totalSeconds / 86400);
+        const hours = Math.floor(
+            (totalSeconds % 86400) / 3600
+        );
+        const minutes = Math.floor(
+            (totalSeconds % 3600) / 60
+        );
 
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Ghosty Uptime",
                     `${days}d ${hours}h ${minutes}m`
                 )
@@ -711,66 +701,81 @@ async function handleCommand(interaction) {
         });
     }
 
-    // -------------------------------
     // BOT INFO
-    // -------------------------------
-
     if (command === "botinfo") {
+
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Ghosty",
-                    "Ghosty is a Discord moderation and utility bot."
+                    "Ghosty is a Discord moderation bot."
                 )
             ],
             ephemeral: true
         });
     }
 
-    // -------------------------------
     // HELP
-    // -------------------------------
-
     if (command === "help") {
+
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Ghosty Commands",
-                    "**Moderation**\n`/ban` `/unban` `/kick` `/timeout` `/untimeout` `/warn` `/warnings` `/clearwarnings`\n\n**Messages**\n`/clear` `/purge` `/slowmode` `/lock` `/unlock` `/lockdown` `/unlockdown`\n\n**AutoMod**\n`/automodconfig`\n\n**Configuration**\n`/setup` `/settings` `/logs` `/logsstatus`\n\n**Information**\n`/userinfo` `/serverinfo` `/roleinfo` `/channelinfo` `/avatar` `/banner`\n\n**Staff**\n`/staff` `/modstats`\n\n**Utility**\n`/help` `/ping` `/uptime` `/botinfo` `/invite` `/support`"
+                    "**Moderation**\n" +
+                    "`/ban` `/unban` `/kick` `/timeout` `/untimeout` `/warn` `/warnings` `/clearwarnings`\n\n" +
+
+                    "**Messages and Channels**\n" +
+                    "`/clear` `/purge` `/slowmode` `/lock` `/unlock` `/lockdown` `/unlockdown`\n\n" +
+
+                    "**AutoMod**\n" +
+                    "`/automodconfig`\n\n" +
+
+                    "**Configuration**\n" +
+                    "`/setup` `/settings` `/logs` `/logsstatus`\n\n" +
+
+                    "**Information**\n" +
+                    "`/userinfo` `/serverinfo` `/roleinfo` `/channelinfo` `/avatar` `/banner`\n\n" +
+
+                    "**Staff**\n" +
+                    "`/staff` `/modstats`\n\n" +
+
+                    "**Utility**\n" +
+                    "`/help` `/ping` `/uptime` `/botinfo` `/invite` `/support`"
                 )
             ],
             ephemeral: true
         });
     }
 
-    // -------------------------------
-    // DEFAULT
-    // -------------------------------
-
+    // OTHER COMMANDS
     return interaction.reply({
         embeds: [
-            createEmbed(
-                "Command Not Implemented",
-                "This Ghosty command has been registered but its functionality has not been added yet."
+            embed(
+                "Coming Soon",
+                "This Ghosty feature has been registered and will be implemented soon."
             )
         ],
         ephemeral: true
     });
 }
 
-// ======================================================
+// =====================================================
 // BUTTON HANDLER
-// ======================================================
+// =====================================================
 
 async function handleButton(interaction) {
+
     if (!interaction.customId.startsWith("automod_")) {
         return;
     }
 
-    if (!interaction.memberPermissions.has(PermissionsBitField.Flags.ManageGuild)) {
+    if (!interaction.memberPermissions.has(
+        PermissionsBitField.Flags.ManageGuild
+    )) {
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "Permission Denied",
                     "You need the Manage Server permission to configure AutoMod."
                 )
@@ -780,31 +785,38 @@ async function handleButton(interaction) {
     }
 
     if (interaction.customId === "automod_enable") {
+
         return interaction.update({
             embeds: [
-                createEmbed(
+                embed(
                     "Ghosty AutoMod",
-                    "AutoMod has been enabled for this server.\n\n**Status:** Enabled\n**Spam Protection:** Enabled\n**Mention Protection:** Enabled\n**Invite Protection:** Enabled\n**Word Filter:** Enabled\n**Excessive Caps:** Disabled"
+                    "**Status:** Enabled\n\n" +
+                    "**Spam Protection:** Enabled\n" +
+                    "**Mention Protection:** Enabled\n" +
+                    "**Invite Protection:** Enabled\n" +
+                    "**Word Filter:** Enabled\n" +
+                    "**Excessive Caps:** Disabled"
                 )
-            ],
-            components: interaction.message.components
+            ]
         });
     }
 
     if (interaction.customId === "automod_disable") {
+
         return interaction.update({
             embeds: [
-                createEmbed(
+                embed(
                     "Ghosty AutoMod",
-                    "AutoMod has been disabled for this server.\n\n**Status:** Disabled"
+                    "**Status:** Disabled"
                 )
-            ],
-            components: interaction.message.components
+            ]
         });
     }
 
     if (interaction.customId === "automod_configure") {
+
         const row = new ActionRowBuilder().addComponents(
+
             new ButtonBuilder()
                 .setCustomId("automod_spam")
                 .setLabel("Spam")
@@ -824,13 +836,14 @@ async function handleButton(interaction) {
                 .setCustomId("automod_words")
                 .setLabel("Word Filter")
                 .setStyle(ButtonStyle.Secondary)
+
         );
 
         return interaction.update({
             embeds: [
-                createEmbed(
+                embed(
                     "AutoMod Configuration",
-                    "Choose the AutoMod feature you want to configure."
+                    "Select the AutoMod feature you want to configure."
                 )
             ],
             components: [row]
@@ -838,9 +851,10 @@ async function handleButton(interaction) {
     }
 
     if (interaction.customId === "automod_logs") {
+
         return interaction.reply({
             embeds: [
-                createEmbed(
+                embed(
                     "AutoMod Logs",
                     "AutoMod logging configuration will be available here."
                 )
@@ -850,17 +864,16 @@ async function handleButton(interaction) {
     }
 }
 
-// ======================================================
+// =====================================================
 // LOGIN
-// ======================================================
+// =====================================================
 
 if (!process.env.DISCORD_TOKEN) {
-    console.error("DISCORD_TOKEN is missing from environment variables.");
-    process.exit(1);
-}
 
-if (!process.env.DISCORD_CLIENT_ID) {
-    console.error("DISCORD_CLIENT_ID is missing from environment variables.");
+    console.error(
+        "DISCORD_TOKEN is missing from environment variables."
+    );
+
     process.exit(1);
 }
 
