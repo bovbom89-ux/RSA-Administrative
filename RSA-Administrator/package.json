@@ -1,7 +1,6 @@
 {
   "name": "ghosty",
   "version": "1.0.0",
-  "description": "Ghosty Discord moderation bot",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"
