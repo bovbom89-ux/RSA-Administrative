@@ -20,6 +20,10 @@ const {
     Routes
 } = require("discord.js");
 
+/* =========================================================
+   CLIENT
+========================================================= */
+
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -29,13 +33,24 @@ const client = new Client({
     ]
 });
 
+/* =========================================================
+   CONFIG
+========================================================= */
+
 const EMBED_COLOR = "#E75D2A";
+
 const DATA_DIR = path.join(__dirname, "../data");
 const DATA_FILE = path.join(DATA_DIR, "guilds.json");
 
 if (!fs.existsSync(DATA_DIR)) {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.mkdirSync(DATA_DIR, {
+        recursive: true
+    });
 }
+
+/* =========================================================
+   DATA
+========================================================= */
 
 let guildData = {};
 
@@ -46,7 +61,11 @@ try {
         );
     }
 } catch (error) {
-    console.error("Could not load guild data:", error);
+    console.error(
+        "Could not load guild data:",
+        error
+    );
+
     guildData = {};
 }
 
@@ -57,7 +76,10 @@ function saveData() {
             JSON.stringify(guildData, null, 4)
         );
     } catch (error) {
-        console.error("Could not save guild data:", error);
+        console.error(
+            "Could not save guild data:",
+            error
+        );
     }
 }
 
@@ -87,13 +109,17 @@ function getGuildData(guildId) {
                 enabled: false,
                 channels: {}
             }
-        };
+        });
 
         saveData();
     }
 
     return guildData[guildId];
 }
+
+/* =========================================================
+   EMBEDS
+========================================================= */
 
 function embed(title, description) {
     return new EmbedBuilder()
@@ -102,12 +128,15 @@ function embed(title, description) {
         .setDescription(description);
 }
 
-function errorEmbed(description) {
-    return embed("Action Failed", description);
-}
-
 function successEmbed(title, description) {
     return embed(title, description);
+}
+
+function errorEmbed(description) {
+    return embed(
+        "Action Failed",
+        description
+    );
 }
 
 /* =========================================================
@@ -115,66 +144,77 @@ function successEmbed(title, description) {
 ========================================================= */
 
 const commands = [
+    /* ---------------- MODERATION ---------------- */
+
     new SlashCommandBuilder()
         .setName("ban")
         .setDescription("Ban a member.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member to ban.")
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
                 .setDescription("Reason for the ban.")
         ),
 
     new SlashCommandBuilder()
         .setName("unban")
         .setDescription("Unban a user.")
-        .addStringOption(o =>
-            o.setName("userid")
-                .setDescription("User ID.")
+        .addStringOption(option =>
+            option
+                .setName("userid")
+                .setDescription("The user's Discord ID.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("kick")
         .setDescription("Kick a member.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member to kick.")
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
                 .setDescription("Reason for the kick.")
         ),
 
     new SlashCommandBuilder()
         .setName("timeout")
         .setDescription("Timeout a member.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member to timeout.")
                 .setRequired(true)
         )
-        .addIntegerOption(o =>
-            o.setName("minutes")
-                .setDescription("Timeout duration.")
+        .addIntegerOption(option =>
+            option
+                .setName("minutes")
+                .setDescription("Timeout duration in minutes.")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(40320)
         )
-        .addStringOption(o =>
-            o.setName("reason")
+        .addStringOption(option =>
+            option
+                .setName("reason")
                 .setDescription("Reason for the timeout.")
         ),
 
     new SlashCommandBuilder()
         .setName("untimeout")
         .setDescription("Remove a member's timeout.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member.")
                 .setRequired(true)
         ),
@@ -182,22 +222,25 @@ const commands = [
     new SlashCommandBuilder()
         .setName("warn")
         .setDescription("Warn a member.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member.")
                 .setRequired(true)
         )
-        .addStringOption(o =>
-            o.setName("reason")
-                .setDescription("Reason.")
+        .addStringOption(option =>
+            option
+                .setName("reason")
+                .setDescription("Reason for the warning.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("warnings")
         .setDescription("View a member's warnings.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member.")
                 .setRequired(true)
         ),
@@ -205,29 +248,22 @@ const commands = [
     new SlashCommandBuilder()
         .setName("clearwarnings")
         .setDescription("Clear a member's warnings.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("Member.")
                 .setRequired(true)
         ),
 
-    new SlashCommandBuilder()
-        .setName("clear")
-        .setDescription("Delete messages.")
-        .addIntegerOption(o =>
-            o.setName("amount")
-                .setDescription("Number of messages.")
-                .setRequired(true)
-                .setMinValue(1)
-                .setMaxValue(100)
-        ),
+    /* ---------------- CHANNEL MANAGEMENT ---------------- */
 
     new SlashCommandBuilder()
         .setName("purge")
-        .setDescription("Delete messages.")
-        .addIntegerOption(o =>
-            o.setName("amount")
-                .setDescription("Number of messages.")
+        .setDescription("Delete messages from the current channel.")
+        .addIntegerOption(option =>
+            option
+                .setName("amount")
+                .setDescription("Number of messages to delete.")
                 .setRequired(true)
                 .setMinValue(1)
                 .setMaxValue(100)
@@ -235,10 +271,11 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("slowmode")
-        .setDescription("Change channel slowmode.")
-        .addIntegerOption(o =>
-            o.setName("seconds")
-                .setDescription("Slowmode in seconds.")
+        .setDescription("Change the current channel's slowmode.")
+        .addIntegerOption(option =>
+            option
+                .setName("seconds")
+                .setDescription("Slowmode duration in seconds.")
                 .setRequired(true)
                 .setMinValue(0)
                 .setMaxValue(21600)
@@ -254,80 +291,78 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("lockdown")
-        .setDescription("Lock all text channels."),
+        .setDescription("Lock all text channels in the server."),
 
     new SlashCommandBuilder()
         .setName("unlockdown")
-        .setDescription("End the server lockdown."),
+        .setDescription("End the active server lockdown."),
+
+    /* ---------------- CONFIGURATION ---------------- */
 
     new SlashCommandBuilder()
         .setName("ghostysetup")
-        .setDescription("Configure Ghosty."),
+        .setDescription("Configure Ghosty for this server."),
 
     new SlashCommandBuilder()
         .setName("settings")
-        .setDescription("View Ghosty settings."),
+        .setDescription("View Ghosty's current configuration."),
 
     new SlashCommandBuilder()
         .setName("automodconfig")
-        .setDescription("Configure AutoMod."),
+        .setDescription("Configure Ghosty's AutoMod."),
 
     new SlashCommandBuilder()
         .setName("logs")
-        .setDescription("Configure logging."),
+        .setDescription("Configure Ghosty's logging channel."),
 
-    new SlashCommandBuilder()
-        .setName("logsstatus")
-        .setDescription("View logging settings."),
+    /* ---------------- INFORMATION ---------------- */
 
     new SlashCommandBuilder()
         .setName("userinfo")
-        .setDescription("View user information.")
-        .addUserOption(o =>
-            o.setName("user")
-                .setDescription("User.")
+        .setDescription("View detailed information about a user.")
+        .addUserOption(option =>
+            option
+                .setName("user")
+                .setDescription("User to inspect.")
         ),
 
     new SlashCommandBuilder()
         .setName("serverinfo")
-        .setDescription("View server information."),
+        .setDescription("View detailed information about the server."),
 
     new SlashCommandBuilder()
         .setName("roleinfo")
-        .setDescription("View role information.")
-        .addRoleOption(o =>
-            o.setName("role")
-                .setDescription("Role.")
+        .setDescription("View information about a role.")
+        .addRoleOption(option =>
+            option
+                .setName("role")
+                .setDescription("Role to inspect.")
                 .setRequired(true)
         ),
 
     new SlashCommandBuilder()
         .setName("channelinfo")
-        .setDescription("View channel information."),
+        .setDescription("View information about the current channel."),
 
     new SlashCommandBuilder()
         .setName("avatar")
         .setDescription("View a user's avatar.")
-        .addUserOption(o =>
-            o.setName("user")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("User.")
         ),
 
     new SlashCommandBuilder()
         .setName("banner")
-        .setDescription("View a user's banner.")
-        .addUserOption(o =>
-            o.setName("user")
+        .setDescription("View a user's profile banner.")
+        .addUserOption(option =>
+            option
+                .setName("user")
                 .setDescription("User.")
         ),
 
-    new SlashCommandBuilder()
-        .setName("staff")
-        .setDescription("View the configured staff settings."),
-
-    new SlashCommandBuilder()
-        .setName("modstats")
-        .setDescription("View moderation statistics."),
+    /* ---------------- UTILITY ---------------- */
 
     new SlashCommandBuilder()
         .setName("help")
@@ -347,18 +382,20 @@ const commands = [
 
     new SlashCommandBuilder()
         .setName("invite")
-        .setDescription("Get the Ghosty invite."),
+        .setDescription("Get Ghosty's invite link."),
 
     new SlashCommandBuilder()
         .setName("support")
-        .setDescription("Get the Ghosty support server.")
+        .setDescription("Get Ghosty's support information.")
 ].map(command => command.toJSON());
 
 /* =========================================================
-   DUPLICATE CHECK
+   DUPLICATE COMMAND CHECK
 ========================================================= */
 
-const commandNames = commands.map(command => command.name);
+const commandNames = commands.map(
+    command => command.name
+);
 
 const duplicateCommands = commandNames.filter(
     (name, index) =>
@@ -384,14 +421,19 @@ console.log(
 
 async function registerCommands() {
     try {
-        const application = await client.application.fetch();
+        const application =
+            await client.application.fetch();
 
         const rest = new REST({
             version: "10"
-        }).setToken(process.env.DISCORD_TOKEN);
+        }).setToken(
+            process.env.DISCORD_TOKEN
+        );
 
         await rest.put(
-            Routes.applicationCommands(application.id),
+            Routes.applicationCommands(
+                application.id
+            ),
             {
                 body: commands
             }
@@ -412,8 +454,11 @@ async function registerCommands() {
    PERMISSIONS
 ========================================================= */
 
-function hasPermission(interaction, permission) {
-    return interaction.memberPermissions.has(
+function hasPermission(
+    interaction,
+    permission
+) {
+    return interaction.memberPermissions?.has(
         permission
     );
 }
@@ -426,17 +471,17 @@ function isAdmin(interaction) {
 }
 
 function isStaff(interaction) {
-    const data = getGuildData(
-        interaction.guild.id
-    );
-
     if (isAdmin(interaction)) {
         return true;
     }
 
+    const data = getGuildData(
+        interaction.guild.id
+    );
+
     if (
         data.staffRole &&
-        interaction.member.roles.cache.has(
+        interaction.member?.roles?.cache?.has(
             data.staffRole
         )
     ) {
@@ -444,23 +489,29 @@ function isStaff(interaction) {
     }
 
     return (
-        interaction.memberPermissions.has(
+        hasPermission(
+            interaction,
             PermissionsBitField.Flags.ManageMessages
         ) ||
-        interaction.memberPermissions.has(
+        hasPermission(
+            interaction,
             PermissionsBitField.Flags.KickMembers
         ) ||
-        interaction.memberPermissions.has(
+        hasPermission(
+            interaction,
             PermissionsBitField.Flags.BanMembers
         ) ||
-        interaction.memberPermissions.has(
+        hasPermission(
+            interaction,
             PermissionsBitField.Flags.ModerateMembers
         )
     );
 }
 
 async function requireAdmin(interaction) {
-    if (isAdmin(interaction)) return true;
+    if (isAdmin(interaction)) {
+        return true;
+    }
 
     await interaction.reply({
         embeds: [
@@ -475,7 +526,9 @@ async function requireAdmin(interaction) {
 }
 
 async function requireStaff(interaction) {
-    if (isStaff(interaction)) return true;
+    if (isStaff(interaction)) {
+        return true;
+    }
 
     await interaction.reply({
         embeds: [
@@ -493,19 +546,33 @@ async function requireStaff(interaction) {
    LOGGING
 ========================================================= */
 
-async function sendLog(guild, logEmbed) {
-    const data = getGuildData(guild.id);
+async function sendLog(
+    guild,
+    logEmbed,
+    components = []
+) {
+    const data =
+        getGuildData(guild.id);
 
-    if (!data.logChannel) return;
+    if (!data.logChannel) {
+        return;
+    }
 
-    const channel = guild.channels.cache.get(
-        data.logChannel
-    );
+    const channel =
+        guild.channels.cache.get(
+            data.logChannel
+        );
 
-    if (!channel || !channel.isTextBased()) return;
+    if (
+        !channel ||
+        !channel.isTextBased()
+    ) {
+        return;
+    }
 
     await channel.send({
-        embeds: [logEmbed]
+        embeds: [logEmbed],
+        components
     }).catch(() => {});
 }
 
@@ -513,261 +580,390 @@ async function sendLog(guild, logEmbed) {
    READY
 ========================================================= */
 
-client.once("ready", async () => {
-    console.log(
-        `Ghosty is online as ${client.user.tag}`
-    );
+client.once(
+    "ready",
+    async () => {
+        console.log(
+            `Ghosty is online as ${client.user.tag}`
+        );
 
-    console.log(
-        `Serving ${client.guilds.cache.size} server(s).`
-    );
+        console.log(
+            `Serving ${client.guilds.cache.size} server(s).`
+        );
 
-    await registerCommands();
-});
+        await registerCommands();
+    }
+);
 
 /* =========================================================
-   MESSAGE / AUTOMOD / HONEYPOT
+   MESSAGE TRACKING
 ========================================================= */
 
 const messageTracker = new Map();
 
-client.on("messageCreate", async message => {
-    if (!message.guild) return;
-    if (message.author.bot) return;
+/* =========================================================
+   MESSAGE CREATE
+========================================================= */
 
-    const data = getGuildData(
-        message.guild.id
-    );
+client.on(
+    "messageCreate",
+    async message => {
+        if (!message.guild) {
+            return;
+        }
 
-    /* ---------------- HONEYPOT ---------------- */
+        if (message.author.bot) {
+            return;
+        }
 
-    if (
-        data.honeypot.enabled &&
-        data.honeypot.channel === message.channel.id
-    ) {
-        await message.delete().catch(() => {});
+        const data =
+            getGuildData(
+                message.guild.id
+            );
 
-        const member = message.member;
-
-        if (!member) return;
+        /* ---------------- HONEYPOT ---------------- */
 
         if (
-            !member.kickable ||
-            member.permissions.has(
-                PermissionsBitField.Flags.Administrator
-            )
+            data.honeypot.enabled &&
+            data.honeypot.channel ===
+                message.channel.id
         ) {
+            await message.delete().catch(() => {});
+
+            const member =
+                message.member;
+
+            if (!member) {
+                return;
+            }
+
+            const protectedMember =
+                member.permissions.has(
+                    PermissionsBitField.Flags.Administrator
+                ) ||
+                (
+                    data.staffRole &&
+                    member.roles.cache.has(
+                        data.staffRole
+                    )
+                );
+
+            if (
+                protectedMember ||
+                !member.kickable
+            ) {
+                await sendLog(
+                    message.guild,
+                    embed(
+                        "Honeypot Triggered",
+                        `A message was detected in the honeypot channel, but Ghosty could not remove the member.\n\n` +
+                        `**User:** ${message.author}\n` +
+                        `**User ID:** ${message.author.id}\n` +
+                        `**Channel:** ${message.channel}`
+                    )
+                );
+
+                return;
+            }
+
+            const kicked =
+                await member.kick(
+                    "Ghosty Honeypot"
+                )
+                .then(() => true)
+                .catch(() => false);
+
+            if (!kicked) {
+                await sendLog(
+                    message.guild,
+                    embed(
+                        "Honeypot Triggered",
+                        `Ghosty detected a honeypot trigger but could not kick the member.\n\n` +
+                        `**User:** ${message.author}\n` +
+                        `**User ID:** ${message.author.id}\n` +
+                        `**Channel:** ${message.channel}`
+                    )
+                );
+
+                return;
+            }
+
+            data.honeypot.kicks++;
+
+            saveData();
+
+            const counter =
+                new ButtonBuilder()
+                    .setCustomId(
+                        "honeypot_kicks"
+                    )
+                    .setLabel(
+                        `Kicks: ${data.honeypot.kicks}`
+                    )
+                    .setStyle(
+                        ButtonStyle.Secondary
+                    )
+                    .setDisabled(true);
+
+            const row =
+                new ActionRowBuilder()
+                    .addComponents(
+                        counter
+                    );
+
             await sendLog(
                 message.guild,
                 embed(
                     "Honeypot Triggered",
-                    `A message was detected in the honeypot channel, but Ghosty could not remove the member.\n\n` +
+                    `A member was automatically removed for sending a message in the honeypot channel.\n\n` +
                     `**User:** ${message.author}\n` +
                     `**User ID:** ${message.author.id}\n` +
-                    `**Channel:** ${message.channel}`
-                )
+                    `**Channel:** ${message.channel}\n` +
+                    `**Action:** Kick`
+                ),
+                [row]
             );
 
             return;
         }
 
-        await member.kick(
-            "Ghosty Honeypot"
-        ).catch(() => {});
+        /* ---------------- AUTOMOD ---------------- */
 
-        data.honeypot.kicks++;
+        if (!data.automod.enabled) {
+            return;
+        }
 
-        saveData();
+        let violation = null;
 
-        const counter = new ButtonBuilder()
-            .setCustomId("honeypot_kicks")
-            .setLabel(
-                `Kicks: ${data.honeypot.kicks}`
+        /* Invite protection */
+
+        if (
+            data.automod.invites &&
+            /(?:discord\.gg\/|discord(?:app)?\.com\/invite\/)/i.test(
+                message.content
             )
-            .setStyle(ButtonStyle.Secondary)
-            .setDisabled(true);
+        ) {
+            violation =
+                "Discord invite links are not allowed.";
+        }
 
-        const row = new ActionRowBuilder()
-            .addComponents(counter);
+        /* Mention protection */
 
-        if (data.logChannel) {
-            const logChannel =
-                message.guild.channels.cache.get(
-                    data.logChannel
+        if (
+            !violation &&
+            data.automod.mentions &&
+            message.mentions.users.size >= 6
+        ) {
+            violation =
+                "Excessive mentions detected.";
+        }
+
+        /* Caps protection */
+
+        if (
+            !violation &&
+            data.automod.caps &&
+            message.content.length >= 12
+        ) {
+            const letters =
+                message.content.replace(
+                    /[^a-zA-Z]/g,
+                    ""
                 );
 
             if (
-                logChannel &&
-                logChannel.isTextBased()
+                letters.length >= 8 &&
+                letters ===
+                    letters.toUpperCase()
             ) {
-                await logChannel.send({
-                    embeds: [
-                        embed(
-                            "Honeypot Triggered",
-                            `A member has been automatically removed for sending a message in the honeypot channel.\n\n` +
-                            `**User:** ${message.author}\n` +
-                            `**User ID:** ${message.author.id}\n` +
-                            `**Channel:** ${message.channel}\n` +
-                            `**Action:** Kick`
-                        )
-                    ],
-                    components: [row]
-                }).catch(() => {});
+                violation =
+                    "Excessive capital letters detected.";
             }
         }
 
-        return;
-    }
-
-    /* ---------------- AUTOMOD ---------------- */
-
-    if (!data.automod.enabled) return;
-
-    let violation = null;
-
-    if (
-        data.automod.invites &&
-        /discord\.gg\/|discord\.com\/invite\//i.test(
-            message.content
-        )
-    ) {
-        violation = "Discord invite links are not allowed.";
-    }
-
-    if (
-        !violation &&
-        data.automod.mentions &&
-        message.mentions.users.size >= 6
-    ) {
-        violation = "Excessive mentions detected.";
-    }
-
-    if (
-        !violation &&
-        data.automod.caps &&
-        message.content.length >= 12
-    ) {
-        const letters =
-            message.content.replace(
-                /[^a-zA-Z]/g,
-                ""
-            );
+        /* Spam protection */
 
         if (
-            letters.length >= 8 &&
-            letters === letters.toUpperCase()
+            !violation &&
+            data.automod.spam
         ) {
-            violation = "Excessive capital letters detected.";
-        }
-    }
+            const key =
+                `${message.guild.id}:${message.author.id}`;
 
-    if (!violation && data.automod.spam) {
-        const key =
-            `${message.guild.id}:${message.author.id}`;
+            const now = Date.now();
 
-        const now = Date.now();
+            const previous =
+                messageTracker.get(key) || [];
 
-        const previous =
-            messageTracker.get(key) || [];
+            const recent =
+                previous.filter(
+                    timestamp =>
+                        now - timestamp <
+                        5000
+                );
 
-        const recent =
-            previous.filter(
-                timestamp =>
-                    now - timestamp < 5000
+            recent.push(now);
+
+            messageTracker.set(
+                key,
+                recent
             );
 
-        recent.push(now);
-
-        messageTracker.set(
-            key,
-            recent
-        );
-
-        if (recent.length >= 6) {
-            violation = "Message spam detected.";
+            if (recent.length >= 6) {
+                violation =
+                    "Message spam detected.";
+            }
         }
+
+        if (!violation) {
+            return;
+        }
+
+        await message.delete().catch(() => {});
+
+        await sendLog(
+            message.guild,
+            embed(
+                "AutoMod Action",
+                `Ghosty removed a message for violating AutoMod.\n\n` +
+                `**User:** ${message.author}\n` +
+                `**User ID:** ${message.author.id}\n` +
+                `**Channel:** ${message.channel}\n` +
+                `**Reason:** ${violation}`
+            )
+        );
     }
+);
 
-    if (!violation) return;
+/* =========================================================
+   CLEAN MESSAGE TRACKER
+========================================================= */
 
-    await message.delete().catch(() => {});
+setInterval(
+    () => {
+        const now = Date.now();
 
-    await sendLog(
-        message.guild,
-        embed(
-            "AutoMod Action",
-            `Ghosty removed a message for violating AutoMod.\n\n` +
-            `**User:** ${message.author}\n` +
-            `**Channel:** ${message.channel}\n` +
-            `**Reason:** ${violation}`
-        )
-    );
-});
+        for (
+            const [
+                key,
+                timestamps
+            ] of messageTracker.entries()
+        ) {
+            const recent =
+                timestamps.filter(
+                    timestamp =>
+                        now - timestamp <
+                        5000
+                );
+
+            if (recent.length === 0) {
+                messageTracker.delete(
+                    key
+                );
+            } else {
+                messageTracker.set(
+                    key,
+                    recent
+                );
+            }
+        }
+    },
+    30000
+);
 
 /* =========================================================
    INTERACTIONS
 ========================================================= */
 
-client.on("interactionCreate", async interaction => {
-    try {
-        if (interaction.isChatInputCommand()) {
-            await handleCommand(interaction);
-            return;
-        }
+client.on(
+    "interactionCreate",
+    async interaction => {
+        try {
+            if (
+                interaction.isChatInputCommand()
+            ) {
+                await handleCommand(
+                    interaction
+                );
 
-        if (interaction.isButton()) {
-            await handleButton(interaction);
-            return;
-        }
+                return;
+            }
 
-        if (interaction.isChannelSelectMenu()) {
-            await handleChannelSelect(interaction);
-            return;
-        }
+            if (
+                interaction.isButton()
+            ) {
+                await handleButton(
+                    interaction
+                );
 
-        if (interaction.isRoleSelectMenu()) {
-            await handleRoleSelect(interaction);
-            return;
-        }
+                return;
+            }
 
-        if (interaction.isStringSelectMenu()) {
-            await handleStringSelect(interaction);
-        }
-    } catch (error) {
-        console.error(
-            "Interaction error:",
-            error
-        );
+            if (
+                interaction.isChannelSelectMenu()
+            ) {
+                await handleChannelSelect(
+                    interaction
+                );
 
-        const response = {
-            embeds: [
-                errorEmbed(
-                    "Ghosty encountered an error while processing that request."
-                )
-            ],
-            ephemeral: true
-        };
+                return;
+            }
 
-        if (
-            interaction.replied ||
-            interaction.deferred
-        ) {
-            await interaction.followUp(
-                response
-            ).catch(() => {});
-        } else {
-            await interaction.reply(
-                response
-            ).catch(() => {});
+            if (
+                interaction.isRoleSelectMenu()
+            ) {
+                await handleRoleSelect(
+                    interaction
+                );
+
+                return;
+            }
+
+            if (
+                interaction.isStringSelectMenu()
+            ) {
+                await handleStringSelect(
+                    interaction
+                );
+            }
+        } catch (error) {
+            console.error(
+                "Interaction error:",
+                error
+            );
+
+            const response = {
+                embeds: [
+                    errorEmbed(
+                        "Ghosty encountered an error while processing that request."
+                    )
+                ],
+                ephemeral: true
+            };
+
+            if (
+                interaction.replied ||
+                interaction.deferred
+            ) {
+                await interaction
+                    .followUp(response)
+                    .catch(() => {});
+            } else {
+                await interaction
+                    .reply(response)
+                    .catch(() => {});
+            }
         }
     }
-});
+);
 
 /* =========================================================
    COMMAND HANDLER
 ========================================================= */
 
-async function handleCommand(interaction) {
+async function handleCommand(
+    interaction
+) {
     const command =
         interaction.commandName;
 
@@ -776,7 +972,6 @@ async function handleCommand(interaction) {
         "settings",
         "automodconfig",
         "logs",
-        "logsstatus",
         "lockdown",
         "unlockdown"
     ];
@@ -790,30 +985,43 @@ async function handleCommand(interaction) {
         "warn",
         "warnings",
         "clearwarnings",
-        "clear",
         "purge",
         "slowmode",
         "lock",
-        "unlock",
-        "staff",
-        "modstats"
+        "unlock"
     ];
 
     if (
-        adminCommands.includes(command) &&
-        !(await requireAdmin(interaction))
+        adminCommands.includes(
+            command
+        )
     ) {
-        return;
+        if (
+            !(await requireAdmin(
+                interaction
+            ))
+        ) {
+            return;
+        }
     }
 
     if (
-        staffCommands.includes(command) &&
-        !(await requireStaff(interaction))
+        staffCommands.includes(
+            command
+        )
     ) {
-        return;
+        if (
+            !(await requireStaff(
+                interaction
+            ))
+        ) {
+            return;
+        }
     }
 
-    /* ---------------- BAN ---------------- */
+    /* =====================================================
+       BAN
+    ===================================================== */
 
     if (command === "ban") {
         if (
@@ -833,13 +1041,29 @@ async function handleCommand(interaction) {
         }
 
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const reason =
             interaction.options.getString(
                 "reason"
             ) ||
             "No reason provided.";
+
+        if (
+            user.id ===
+            interaction.user.id
+        ) {
+            return interaction.reply({
+                embeds: [
+                    errorEmbed(
+                        "You cannot ban yourself."
+                    )
+                ],
+                ephemeral: true
+            });
+        }
 
         const member =
             await interaction.guild.members
@@ -853,7 +1077,7 @@ async function handleCommand(interaction) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
-                        "Ghosty cannot ban that member. Check the role hierarchy."
+                        "Ghosty cannot ban that member. Check the bot's role hierarchy and permissions."
                     )
                 ],
                 ephemeral: true
@@ -869,6 +1093,7 @@ async function handleCommand(interaction) {
             embed(
                 "Member Banned",
                 `**User:** ${user}\n` +
+                `**User ID:** ${user.id}\n` +
                 `**Moderator:** ${interaction.user}\n` +
                 `**Reason:** ${reason}`
             )
@@ -878,14 +1103,19 @@ async function handleCommand(interaction) {
             embeds: [
                 successEmbed(
                     "Member Banned",
-                    `${user} has been banned.\n\n**Reason:** ${reason}`
+                    `${user} has been permanently banned from the server.\n\n` +
+                    `**User ID:** ${user.id}\n` +
+                    `**Moderator:** ${interaction.user}\n` +
+                    `**Reason:** ${reason}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- UNBAN ---------------- */
+    /* =====================================================
+       UNBAN
+    ===================================================== */
 
     if (command === "unban") {
         if (
@@ -914,11 +1144,21 @@ async function handleCommand(interaction) {
                 userId
             );
 
+            await sendLog(
+                interaction.guild,
+                embed(
+                    "User Unbanned",
+                    `**User ID:** ${userId}\n` +
+                    `**Moderator:** ${interaction.user}`
+                )
+            );
+
             return interaction.reply({
                 embeds: [
                     successEmbed(
                         "User Unbanned",
-                        `User ID **${userId}** has been unbanned.`
+                        `User ID **${userId}** has been unbanned.\n\n` +
+                        `**Moderator:** ${interaction.user}`
                     )
                 ],
                 ephemeral: true
@@ -927,7 +1167,7 @@ async function handleCommand(interaction) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
-                        "That user could not be unbanned."
+                        "That user could not be unbanned. Check that the ID is correct and that the user is currently banned."
                     )
                 ],
                 ephemeral: true
@@ -935,7 +1175,9 @@ async function handleCommand(interaction) {
         }
     }
 
-    /* ---------------- KICK ---------------- */
+    /* =====================================================
+       KICK
+    ===================================================== */
 
     if (command === "kick") {
         if (
@@ -955,13 +1197,29 @@ async function handleCommand(interaction) {
         }
 
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const reason =
             interaction.options.getString(
                 "reason"
             ) ||
             "No reason provided.";
+
+        if (
+            user.id ===
+            interaction.user.id
+        ) {
+            return interaction.reply({
+                embeds: [
+                    errorEmbed(
+                        "You cannot kick yourself."
+                    )
+                ],
+                ephemeral: true
+            });
+        }
 
         const member =
             await interaction.guild.members
@@ -975,7 +1233,7 @@ async function handleCommand(interaction) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
-                        "Ghosty cannot kick that member. Check the role hierarchy."
+                        "Ghosty cannot kick that member. Check the bot's role hierarchy and permissions."
                     )
                 ],
                 ephemeral: true
@@ -989,6 +1247,7 @@ async function handleCommand(interaction) {
             embed(
                 "Member Kicked",
                 `**User:** ${user}\n` +
+                `**User ID:** ${user.id}\n` +
                 `**Moderator:** ${interaction.user}\n` +
                 `**Reason:** ${reason}`
             )
@@ -998,14 +1257,19 @@ async function handleCommand(interaction) {
             embeds: [
                 successEmbed(
                     "Member Kicked",
-                    `${user} has been kicked.\n\n**Reason:** ${reason}`
+                    `${user} has been kicked from the server.\n\n` +
+                    `**User ID:** ${user.id}\n` +
+                    `**Moderator:** ${interaction.user}\n` +
+                    `**Reason:** ${reason}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- TIMEOUT ---------------- */
+    /* =====================================================
+       TIMEOUT
+    ===================================================== */
 
     if (command === "timeout") {
         if (
@@ -1025,7 +1289,9 @@ async function handleCommand(interaction) {
         }
 
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const minutes =
             interaction.options.getInteger(
@@ -1050,7 +1316,7 @@ async function handleCommand(interaction) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
-                        "Ghosty cannot timeout that member."
+                        "Ghosty cannot timeout that member. Check the bot's role hierarchy and permissions."
                     )
                 ],
                 ephemeral: true
@@ -1067,6 +1333,7 @@ async function handleCommand(interaction) {
             embed(
                 "Member Timed Out",
                 `**User:** ${user}\n` +
+                `**User ID:** ${user.id}\n` +
                 `**Moderator:** ${interaction.user}\n` +
                 `**Duration:** ${minutes} minute(s)\n` +
                 `**Reason:** ${reason}`
@@ -1077,14 +1344,19 @@ async function handleCommand(interaction) {
             embeds: [
                 successEmbed(
                     "Member Timed Out",
-                    `${user} has been timed out for **${minutes} minute(s)**.\n\n**Reason:** ${reason}`
+                    `${user} has been timed out.\n\n` +
+                    `**Duration:** ${minutes} minute(s)\n` +
+                    `**Moderator:** ${interaction.user}\n` +
+                    `**Reason:** ${reason}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- UNTIMEOUT ---------------- */
+    /* =====================================================
+       UNTIMEOUT
+    ===================================================== */
 
     if (command === "untimeout") {
         if (
@@ -1104,7 +1376,9 @@ async function handleCommand(interaction) {
         }
 
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const member =
             await interaction.guild.members
@@ -1118,7 +1392,7 @@ async function handleCommand(interaction) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
-                        "Ghosty cannot modify that member."
+                        "Ghosty cannot modify that member. Check the bot's role hierarchy."
                     )
                 ],
                 ephemeral: true
@@ -1127,18 +1401,30 @@ async function handleCommand(interaction) {
 
         await member.timeout(null);
 
+        await sendLog(
+            interaction.guild,
+            embed(
+                "Timeout Removed",
+                `**User:** ${user}\n` +
+                `**Moderator:** ${interaction.user}`
+            )
+        );
+
         return interaction.reply({
             embeds: [
                 successEmbed(
                     "Timeout Removed",
-                    `The timeout has been removed from ${user}.`
+                    `The timeout has been removed from ${user}.\n\n` +
+                    `**Moderator:** ${interaction.user}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- WARN ---------------- */
+    /* =====================================================
+       WARN
+    ===================================================== */
 
     if (command === "warn") {
         if (
@@ -1158,7 +1444,9 @@ async function handleCommand(interaction) {
         }
 
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const reason =
             interaction.options.getString(
@@ -1176,19 +1464,25 @@ async function handleCommand(interaction) {
 
         data.warnings[user.id].push({
             reason,
-            moderator: interaction.user.id,
+            moderator:
+                interaction.user.id,
             timestamp: Date.now()
         });
 
         saveData();
+
+        const warningCount =
+            data.warnings[user.id].length;
 
         await sendLog(
             interaction.guild,
             embed(
                 "Member Warned",
                 `**User:** ${user}\n` +
+                `**User ID:** ${user.id}\n` +
                 `**Moderator:** ${interaction.user}\n` +
-                `**Reason:** ${reason}`
+                `**Reason:** ${reason}\n` +
+                `**Total Warnings:** ${warningCount}`
             )
         );
 
@@ -1196,18 +1490,25 @@ async function handleCommand(interaction) {
             embeds: [
                 successEmbed(
                     "Member Warned",
-                    `${user} has received a warning.\n\n**Reason:** ${reason}`
+                    `${user} has received a warning.\n\n` +
+                    `**Reason:** ${reason}\n` +
+                    `**Total Warnings:** ${warningCount}\n` +
+                    `**Moderator:** ${interaction.user}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- WARNINGS ---------------- */
+    /* =====================================================
+       WARNINGS
+    ===================================================== */
 
     if (command === "warnings") {
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const data =
             getGuildData(
@@ -1217,12 +1518,14 @@ async function handleCommand(interaction) {
         const warnings =
             data.warnings[user.id] || [];
 
-        if (warnings.length === 0) {
+        if (
+            warnings.length === 0
+        ) {
             return interaction.reply({
                 embeds: [
                     embed(
                         "Warnings",
-                        `${user} has no warnings.`
+                        `${user} currently has no warnings in this server.`
                     )
                 ],
                 ephemeral: true
@@ -1233,11 +1536,12 @@ async function handleCommand(interaction) {
             warnings
                 .map(
                     (warning, index) =>
-                        `**${index + 1}.** ${warning.reason}\n` +
-                        `Moderator: <@${warning.moderator}>\n` +
-                        `Date: <t:${Math.floor(
+                        `**Warning ${index + 1}**\n` +
+                        `**Reason:** ${warning.reason}\n` +
+                        `**Moderator:** <@${warning.moderator}>\n` +
+                        `**Date:** <t:${Math.floor(
                             warning.timestamp / 1000
-                        )}:R>`
+                        )}:F>`
                 )
                 .join("\n\n");
 
@@ -1245,45 +1549,64 @@ async function handleCommand(interaction) {
             embeds: [
                 embed(
                     `Warnings — ${user.tag}`,
-                    description
+                    `**Total Warnings:** ${warnings.length}\n\n${description}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- CLEAR WARNINGS ---------------- */
+    /* =====================================================
+       CLEAR WARNINGS
+    ===================================================== */
 
     if (command === "clearwarnings") {
         const user =
-            interaction.options.getUser("user");
+            interaction.options.getUser(
+                "user"
+            );
 
         const data =
             getGuildData(
                 interaction.guild.id
             );
 
+        const existing =
+            data.warnings[user.id]?.length ||
+            0;
+
         delete data.warnings[user.id];
 
         saveData();
+
+        await sendLog(
+            interaction.guild,
+            embed(
+                "Warnings Cleared",
+                `**User:** ${user}\n` +
+                `**Moderator:** ${interaction.user}\n` +
+                `**Warnings Removed:** ${existing}`
+            )
+        );
 
         return interaction.reply({
             embeds: [
                 successEmbed(
                     "Warnings Cleared",
-                    `All warnings for ${user} have been removed.`
+                    `All warnings for ${user} have been removed.\n\n` +
+                    `**Warnings Removed:** ${existing}\n` +
+                    `**Moderator:** ${interaction.user}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- CLEAR / PURGE ---------------- */
+    /* =====================================================
+       PURGE
+    ===================================================== */
 
-    if (
-        command === "clear" ||
-        command === "purge"
-    ) {
+    if (command === "purge") {
         if (
             !hasPermission(
                 interaction,
@@ -1311,18 +1634,31 @@ async function handleCommand(interaction) {
                 true
             );
 
+        await sendLog(
+            interaction.guild,
+            embed(
+                "Messages Purged",
+                `**Channel:** ${interaction.channel}\n` +
+                `**Messages Deleted:** ${deleted.size}\n` +
+                `**Moderator:** ${interaction.user}`
+            )
+        );
+
         return interaction.reply({
             embeds: [
                 successEmbed(
-                    "Messages Cleared",
-                    `Ghosty deleted **${deleted.size}** messages.`
+                    "Messages Purged",
+                    `Ghosty deleted **${deleted.size}** message(s) from ${interaction.channel}.\n\n` +
+                    `**Moderator:** ${interaction.user}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- SLOWMODE ---------------- */
+    /* =====================================================
+       SLOWMODE
+    ===================================================== */
 
     if (command === "slowmode") {
         if (
@@ -1350,20 +1686,32 @@ async function handleCommand(interaction) {
             seconds
         );
 
+        await sendLog(
+            interaction.guild,
+            embed(
+                "Slowmode Updated",
+                `**Channel:** ${interaction.channel}\n` +
+                `**New Slowmode:** ${seconds === 0 ? "Disabled" : `${seconds} seconds`}\n` +
+                `**Moderator:** ${interaction.user}`
+            )
+        );
+
         return interaction.reply({
             embeds: [
                 successEmbed(
                     "Slowmode Updated",
                     seconds === 0
-                        ? "Slowmode has been disabled."
-                        : `Slowmode is now **${seconds} seconds**.`
+                        ? `Slowmode has been disabled in ${interaction.channel}.`
+                        : `Slowmode is now **${seconds} seconds** in ${interaction.channel}.`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- LOCK ---------------- */
+    /* =====================================================
+       LOCK
+    ===================================================== */
 
     if (command === "lock") {
         if (
@@ -1389,18 +1737,29 @@ async function handleCommand(interaction) {
             }
         );
 
+        await sendLog(
+            interaction.guild,
+            embed(
+                "Channel Locked",
+                `**Channel:** ${interaction.channel}\n` +
+                `**Moderator:** ${interaction.user}`
+            )
+        );
+
         return interaction.reply({
             embeds: [
                 successEmbed(
                     "Channel Locked",
-                    "This channel has been locked."
+                    `${interaction.channel} has been locked.`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- UNLOCK ---------------- */
+    /* =====================================================
+       UNLOCK
+    ===================================================== */
 
     if (command === "unlock") {
         if (
@@ -1426,18 +1785,29 @@ async function handleCommand(interaction) {
             }
         );
 
+        await sendLog(
+            interaction.guild,
+            embed(
+                "Channel Unlocked",
+                `**Channel:** ${interaction.channel}\n` +
+                `**Moderator:** ${interaction.user}`
+            )
+        );
+
         return interaction.reply({
             embeds: [
                 successEmbed(
                     "Channel Unlocked",
-                    "This channel has been unlocked."
+                    `${interaction.channel} has been unlocked.`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- LOCKDOWN ---------------- */
+    /* =====================================================
+       LOCKDOWN
+    ===================================================== */
 
     if (
         command === "lockdown" ||
@@ -1448,38 +1818,75 @@ async function handleCommand(interaction) {
                 interaction.guild.id
             );
 
-        if (command === "lockdown") {
-            data.lockdown.enabled = true;
+        /* ---------------- START ---------------- */
+
+        if (
+            command === "lockdown"
+        ) {
+            if (
+                data.lockdown.enabled
+            ) {
+                return interaction.reply({
+                    embeds: [
+                        errorEmbed(
+                            "A server lockdown is already active."
+                        )
+                    ],
+                    ephemeral: true
+                });
+            }
+
+            data.lockdown.enabled =
+                true;
+
             data.lockdown.channels = {};
 
             const channels =
                 interaction.guild.channels.cache.filter(
                     channel =>
                         channel.type ===
-                        ChannelType.GuildText
+                            ChannelType.GuildText &&
+                        channel
+                            .permissionOverwrites
                 );
 
-            for (const channel of channels.values()) {
-                const overwrite =
+            let locked = 0;
+
+            for (
+                const channel of
+                    channels.values()
+            ) {
+                const everyoneOverwrite =
                     channel.permissionOverwrites.cache.get(
                         interaction.guild.roles.everyone.id
                     );
 
-                data.lockdown.channels[channel.id] = {
-                    allow: overwrite
-                        ? overwrite.allow.bitfield.toString()
-                        : "0",
-                    deny: overwrite
-                        ? overwrite.deny.bitfield.toString()
-                        : "0"
+                data.lockdown.channels[
+                    channel.id
+                ] = {
+                    allow:
+                        everyoneOverwrite
+                            ? everyoneOverwrite.allow.bitfield.toString()
+                            : "0",
+                    deny:
+                        everyoneOverwrite
+                            ? everyoneOverwrite.deny.bitfield.toString()
+                            : "0"
                 };
 
-                await channel.permissionOverwrites.edit(
-                    interaction.guild.roles.everyone,
-                    {
-                        SendMessages: false
-                    }
-                ).catch(() => {});
+                const success =
+                    await channel.permissionOverwrites.edit(
+                        interaction.guild.roles.everyone,
+                        {
+                            SendMessages: false
+                        }
+                    )
+                    .then(() => true)
+                    .catch(() => false);
+
+                if (success) {
+                    locked++;
+                }
             }
 
             saveData();
@@ -1488,7 +1895,9 @@ async function handleCommand(interaction) {
                 interaction.guild,
                 embed(
                     "Server Lockdown",
-                    `${interaction.user} activated a server-wide lockdown.`
+                    `A server-wide lockdown was activated.\n\n` +
+                    `**Moderator:** ${interaction.user}\n` +
+                    `**Channels Locked:** ${locked}`
                 )
             );
 
@@ -1496,23 +1905,31 @@ async function handleCommand(interaction) {
                 embeds: [
                     successEmbed(
                         "Server Lockdown",
-                        `Ghosty has locked **${channels.size}** text channels.`
+                        `Ghosty has activated a server-wide lockdown.\n\n` +
+                        `**Channels Locked:** ${locked}\n` +
+                        `**Moderator:** ${interaction.user}`
                     )
                 ],
                 ephemeral: true
             });
         }
 
-        if (!data.lockdown.enabled) {
+        /* ---------------- END ---------------- */
+
+        if (
+            !data.lockdown.enabled
+        ) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
-                        "There is no active lockdown."
+                        "There is no active server lockdown."
                     )
                 ],
                 ephemeral: true
             });
         }
+
+        let restored = 0;
 
         for (
             const [
@@ -1527,18 +1944,45 @@ async function handleCommand(interaction) {
                     channelId
                 );
 
-            if (!channel) continue;
+            if (!channel) {
+                continue;
+            }
 
-            await channel.permissionOverwrites.edit(
-                interaction.guild.roles.everyone,
-                {
-                    SendMessages: null
-                }
-            ).catch(() => {});
+            try {
+                const allow =
+                    BigInt(
+                        previous.allow || "0"
+                    );
+
+                const deny =
+                    BigInt(
+                        previous.deny || "0"
+                    );
+
+                await channel.permissionOverwrites.edit(
+                    interaction.guild.roles.everyone,
+                    {
+                        allow,
+                        deny
+                    }
+                );
+
+                restored++;
+            } catch {
+                await channel.permissionOverwrites.edit(
+                    interaction.guild.roles.everyone,
+                    {
+                        SendMessages: null
+                    }
+                ).catch(() => {});
+            }
         }
 
-        data.lockdown.enabled = false;
-        data.lockdown.channels = {};
+        data.lockdown.enabled =
+            false;
+
+        data.lockdown.channels =
+            {};
 
         saveData();
 
@@ -1546,7 +1990,9 @@ async function handleCommand(interaction) {
             interaction.guild,
             embed(
                 "Lockdown Ended",
-                `${interaction.user} ended the server lockdown.`
+                `The server lockdown was ended.\n\n` +
+                `**Moderator:** ${interaction.user}\n` +
+                `**Channels Restored:** ${restored}`
             )
         );
 
@@ -1554,22 +2000,34 @@ async function handleCommand(interaction) {
             embeds: [
                 successEmbed(
                     "Lockdown Ended",
-                    "Ghosty has ended the server lockdown."
+                    `Ghosty has ended the server lockdown.\n\n` +
+                    `**Channels Restored:** ${restored}\n` +
+                    `**Moderator:** ${interaction.user}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- GHOSTY SETUP ---------------- */
+    /* =====================================================
+       GHOSTY SETUP
+    ===================================================== */
 
-    if (command === "ghostysetup") {
-        return showSetup(interaction);
+    if (
+        command === "ghostysetup"
+    ) {
+        return showSetup(
+            interaction
+        );
     }
 
-    /* ---------------- SETTINGS ---------------- */
+    /* =====================================================
+       SETTINGS
+    ===================================================== */
 
-    if (command === "settings") {
+    if (
+        command === "settings"
+    ) {
         const data =
             getGuildData(
                 interaction.guild.id
@@ -1579,58 +2037,44 @@ async function handleCommand(interaction) {
             embeds: [
                 embed(
                     "Ghosty Settings",
-                    `**AutoMod:** ${
-                        data.automod.enabled
-                            ? "Enabled"
-                            : "Disabled"
-                    }\n` +
+                    `**AutoMod:** ${data.automod.enabled ? "Enabled" : "Disabled"}\n` +
+                    `**Spam Protection:** ${data.automod.spam ? "Enabled" : "Disabled"}\n` +
+                    `**Mention Protection:** ${data.automod.mentions ? "Enabled" : "Disabled"}\n` +
+                    `**Invite Protection:** ${data.automod.invites ? "Enabled" : "Disabled"}\n` +
+                    `**Caps Protection:** ${data.automod.caps ? "Enabled" : "Disabled"}\n\n` +
 
-                    `**Honeypot:** ${
-                        data.honeypot.enabled
-                            ? "Enabled"
-                            : "Disabled"
-                    }\n` +
+                    `**Honeypot:** ${data.honeypot.enabled ? "Enabled" : "Disabled"}\n` +
+                    `**Honeypot Channel:** ${data.honeypot.channel ? `<#${data.honeypot.channel}>` : "Not configured"}\n` +
+                    `**Honeypot Kicks:** ${data.honeypot.kicks}\n\n` +
 
-                    `**Honeypot Channel:** ${
-                        data.honeypot.channel
-                            ? `<#${data.honeypot.channel}>`
-                            : "Not configured"
-                    }\n` +
-
-                    `**Honeypot Kicks:** ${data.honeypot.kicks}\n` +
-
-                    `**Log Channel:** ${
-                        data.logChannel
-                            ? `<#${data.logChannel}>`
-                            : "Not configured"
-                    }\n` +
-
-                    `**Staff Role:** ${
-                        data.staffRole
-                            ? `<@&${data.staffRole}>`
-                            : "Not configured"
-                    }\n` +
-
-                    `**Lockdown:** ${
-                        data.lockdown.enabled
-                            ? "Active"
-                            : "Inactive"
-                    }`
+                    `**Logging:** ${data.logChannel ? `<#${data.logChannel}>` : "Not configured"}\n` +
+                    `**Staff Role:** ${data.staffRole ? `<@&${data.staffRole}>` : "Not configured"}\n` +
+                    `**Lockdown:** ${data.lockdown.enabled ? "Active" : "Inactive"}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- AUTOMOD CONFIG ---------------- */
+    /* =====================================================
+       AUTOMOD CONFIG
+    ===================================================== */
 
-    if (command === "automodconfig") {
-        return showAutoMod(interaction);
+    if (
+        command === "automodconfig"
+    ) {
+        return showAutoMod(
+            interaction
+        );
     }
 
-    /* ---------------- LOGS ---------------- */
+    /* =====================================================
+       LOGS
+    ===================================================== */
 
-    if (command === "logs") {
+    if (
+        command === "logs"
+    ) {
         const data =
             getGuildData(
                 interaction.guild.id
@@ -1652,7 +2096,7 @@ async function handleCommand(interaction) {
             embeds: [
                 embed(
                     "Logging Configuration",
-                    `Current channel: ${
+                    `**Current Channel:** ${
                         data.logChannel
                             ? `<#${data.logChannel}>`
                             : "Not configured"
@@ -1667,32 +2111,13 @@ async function handleCommand(interaction) {
         });
     }
 
-    /* ---------------- LOG STATUS ---------------- */
+    /* =====================================================
+       USER INFO
+    ===================================================== */
 
-    if (command === "logsstatus") {
-        const data =
-            getGuildData(
-                interaction.guild.id
-            );
-
-        return interaction.reply({
-            embeds: [
-                embed(
-                    "Logging Status",
-                    `**Log Channel:** ${
-                        data.logChannel
-                            ? `<#${data.logChannel}>`
-                            : "Not configured"
-                    }`
-                )
-            ],
-            ephemeral: true
-        });
-    }
-
-    /* ---------------- USER INFO ---------------- */
-
-    if (command === "userinfo") {
+    if (
+        command === "userinfo"
+    ) {
         const user =
             interaction.options.getUser(
                 "user"
@@ -1704,69 +2129,128 @@ async function handleCommand(interaction) {
                 .fetch(user.id)
                 .catch(() => null);
 
+        const roles =
+            member
+                ? member.roles.cache
+                    .filter(
+                        role =>
+                            role.id !==
+                            interaction.guild.id
+                    )
+                    .sort(
+                        (a, b) =>
+                            b.position -
+                            a.position
+                    )
+                    .map(
+                        role =>
+                            role.toString()
+                    )
+                    .join(", ") ||
+                  "None"
+                : "Not a member";
+
+        const accountAge =
+            Math.floor(
+                (
+                    Date.now() -
+                    user.createdTimestamp
+                ) / 86400000
+            );
+
         return interaction.reply({
             embeds: [
                 embed(
                     "User Information",
                     `**Username:** ${user.tag}\n` +
                     `**User ID:** ${user.id}\n` +
-                    `**Bot:** ${user.bot ? "Yes" : "No"}\n` +
-                    `**Account Created:** <t:${Math.floor(
-                        user.createdTimestamp / 1000
-                    )}:F>\n` +
+                    `**Bot Account:** ${user.bot ? "Yes" : "No"}\n` +
+                    `**Account Created:** <t:${Math.floor(user.createdTimestamp / 1000)}:F>\n` +
+                    `**Account Age:** ${accountAge} day(s)\n\n` +
+
+                    `**Server Member:** ${member ? "Yes" : "No"}\n` +
                     `**Joined Server:** ${
-                        member
-                            ? `<t:${Math.floor(
-                                member.joinedTimestamp / 1000
-                            )}:F>`
+                        member?.joinedTimestamp
+                            ? `<t:${Math.floor(member.joinedTimestamp / 1000)}:F>`
                             : "Unknown"
                     }\n` +
-                    `**Roles:** ${
+                    `**Highest Role:** ${
                         member
-                            ? member.roles.cache
-                                .filter(role =>
-                                    role.id !==
-                                    interaction.guild.id
-                                )
-                                .map(role => role.toString())
-                                .join(", ") ||
-                              "None"
-                            : "Unknown"
-                    }`
+                            ? member.roles.highest.toString()
+                            : "None"
+                    }\n` +
+                    `**Roles:** ${roles}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- SERVER INFO ---------------- */
+    /* =====================================================
+       SERVER INFO
+    ===================================================== */
 
-    if (command === "serverinfo") {
+    if (
+        command === "serverinfo"
+    ) {
         const guild =
             interaction.guild;
+
+        const owner =
+            await guild.fetchOwner()
+                .catch(() => null);
+
+        const textChannels =
+            guild.channels.cache.filter(
+                channel =>
+                    channel.type ===
+                    ChannelType.GuildText
+            ).size;
+
+        const voiceChannels =
+            guild.channels.cache.filter(
+                channel =>
+                    channel.type ===
+                    ChannelType.GuildVoice
+            ).size;
+
+        const categories =
+            guild.channels.cache.filter(
+                channel =>
+                    channel.type ===
+                    ChannelType.GuildCategory
+            ).size;
 
         return interaction.reply({
             embeds: [
                 embed(
                     "Server Information",
                     `**Name:** ${guild.name}\n` +
-                    `**ID:** ${guild.id}\n` +
-                    `**Owner:** <@${guild.ownerId}>\n` +
+                    `**Server ID:** ${guild.id}\n` +
+                    `**Owner:** ${owner ? owner.user.tag : `<@${guild.ownerId}>`}\n` +
                     `**Members:** ${guild.memberCount}\n` +
-                    `**Channels:** ${guild.channels.cache.size}\n` +
                     `**Roles:** ${guild.roles.cache.size}\n` +
-                    `**Created:** <t:${Math.floor(
-                        guild.createdTimestamp / 1000
-                    )}:F>`
+                    `**Channels:** ${guild.channels.cache.size}\n` +
+                    `**Text Channels:** ${textChannels}\n` +
+                    `**Voice Channels:** ${voiceChannels}\n` +
+                    `**Categories:** ${categories}\n` +
+                    `**Boost Level:** ${guild.premiumTier}\n` +
+                    `**Boosts:** ${guild.premiumSubscriptionCount || 0}\n` +
+                    `**Verification Level:** ${guild.verificationLevel}\n` +
+                    `**Created:** <t:${Math.floor(guild.createdTimestamp / 1000)}:F>`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- ROLE INFO ---------------- */
+    /* =====================================================
+       ROLE INFO
+    ===================================================== */
 
-    if (command === "roleinfo") {
+    if (
+        command === "roleinfo"
+    ) {
         const role =
             interaction.options.getRole(
                 "role"
@@ -1780,17 +2264,24 @@ async function handleCommand(interaction) {
                     `**ID:** ${role.id}\n` +
                     `**Members:** ${role.members.size}\n` +
                     `**Position:** ${role.position}\n` +
+                    `**Colour:** ${role.hexColor}\n` +
                     `**Mentionable:** ${role.mentionable ? "Yes" : "No"}\n` +
-                    `**Hoisted:** ${role.hoist ? "Yes" : "No"}`
+                    `**Hoisted:** ${role.hoist ? "Yes" : "No"}\n` +
+                    `**Managed:** ${role.managed ? "Yes" : "No"}\n` +
+                    `**Created:** <t:${Math.floor(role.createdTimestamp / 1000)}:F>`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- CHANNEL INFO ---------------- */
+    /* =====================================================
+       CHANNEL INFO
+    ===================================================== */
 
-    if (command === "channelinfo") {
+    if (
+        command === "channelinfo"
+    ) {
         const channel =
             interaction.channel;
 
@@ -1801,18 +2292,27 @@ async function handleCommand(interaction) {
                     `**Name:** ${channel.name}\n` +
                     `**ID:** ${channel.id}\n` +
                     `**Type:** ${channel.type}\n` +
-                    `**Created:** <t:${Math.floor(
-                        channel.createdTimestamp / 1000
-                    )}:F>`
+                    `**Category:** ${channel.parent ? channel.parent.name : "None"}\n` +
+                    `**Position:** ${channel.position}\n` +
+                    `**Slowmode:** ${
+                        "rateLimitPerUser" in channel
+                            ? `${channel.rateLimitPerUser} second(s)`
+                            : "Not available"
+                    }\n` +
+                    `**Created:** <t:${Math.floor(channel.createdTimestamp / 1000)}:F>`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- AVATAR ---------------- */
+    /* =====================================================
+       AVATAR
+    ===================================================== */
 
-    if (command === "avatar") {
+    if (
+        command === "avatar"
+    ) {
         const user =
             interaction.options.getUser(
                 "user"
@@ -1822,21 +2322,32 @@ async function handleCommand(interaction) {
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
-                    .setColor(EMBED_COLOR)
-                    .setTitle("Avatar")
+                    .setColor(
+                        EMBED_COLOR
+                    )
+                    .setTitle(
+                        `${user.tag}'s Avatar`
+                    )
                     .setImage(
                         user.displayAvatarURL({
                             size: 4096
                         })
                     )
+                    .setFooter({
+                        text: `User ID: ${user.id}`
+                    })
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- BANNER ---------------- */
+    /* =====================================================
+       BANNER
+    ===================================================== */
 
-    if (command === "banner") {
+    if (
+        command === "banner"
+    ) {
         const user =
             interaction.options.getUser(
                 "user"
@@ -1860,123 +2371,116 @@ async function handleCommand(interaction) {
         return interaction.reply({
             embeds: [
                 new EmbedBuilder()
-                    .setColor(EMBED_COLOR)
-                    .setTitle("Profile Banner")
+                    .setColor(
+                        EMBED_COLOR
+                    )
+                    .setTitle(
+                        `${user.tag}'s Profile Banner`
+                    )
                     .setImage(
                         fetched.bannerURL({
                             size: 4096
                         })
                     )
+                    .setFooter({
+                        text: `User ID: ${user.id}`
+                    })
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- STAFF ---------------- */
+    /* =====================================================
+       HELP
+    ===================================================== */
 
-    if (command === "staff") {
-        const data =
-            getGuildData(
-                interaction.guild.id
-            );
-
-        return interaction.reply({
-            embeds: [
-                embed(
-                    "Staff Settings",
-                    `**Staff Role:** ${
-                        data.staffRole
-                            ? `<@&${data.staffRole}>`
-                            : "Not configured"
-                    }`
-                )
-            ],
-            ephemeral: true
-        });
-    }
-
-    /* ---------------- MOD STATS ---------------- */
-
-    if (command === "modstats") {
-        const data =
-            getGuildData(
-                interaction.guild.id
-            );
-
-        return interaction.reply({
-            embeds: [
-                embed(
-                    "Ghosty Moderation Statistics",
-                    `**Honeypot Kicks:** ${data.honeypot.kicks}\n` +
-                    `**Warnings Stored:** ${
-                        Object.values(
-                            data.warnings
-                        ).reduce(
-                            (total, list) =>
-                                total + list.length,
-                            0
-                        )
-                    }\n` +
-                    `**AutoMod:** ${
-                        data.automod.enabled
-                            ? "Enabled"
-                            : "Disabled"
-                    }`
-                )
-            ],
-            ephemeral: true
-        });
-    }
-
-    /* ---------------- HELP ---------------- */
-
-    if (command === "help") {
+    if (
+        command === "help"
+    ) {
         return interaction.reply({
             embeds: [
                 embed(
                     "Ghosty Commands",
                     `**Moderation**\n` +
-                    `/ban /unban /kick /timeout /untimeout /warn /warnings /clearwarnings\n\n` +
+                    `/ban — Ban a member\n` +
+                    `/unban — Unban a user\n` +
+                    `/kick — Kick a member\n` +
+                    `/timeout — Timeout a member\n` +
+                    `/untimeout — Remove a timeout\n` +
+                    `/warn — Warn a member\n` +
+                    `/warnings — View warnings\n` +
+                    `/clearwarnings — Clear warnings\n\n` +
 
                     `**Channel Management**\n` +
-                    `/clear /purge /slowmode /lock /unlock /lockdown /unlockdown\n\n` +
+                    `/purge — Delete messages\n` +
+                    `/slowmode — Change slowmode\n` +
+                    `/lock — Lock a channel\n` +
+                    `/unlock — Unlock a channel\n` +
+                    `/lockdown — Lock the server\n` +
+                    `/unlockdown — End a lockdown\n\n` +
 
                     `**Configuration**\n` +
-                    `/ghostysetup /settings /automodconfig /logs /logsstatus\n\n` +
+                    `/ghostysetup — Main configuration panel\n` +
+                    `/settings — View current settings\n` +
+                    `/automodconfig — Configure AutoMod\n` +
+                    `/logs — Configure logging\n\n` +
 
                     `**Information**\n` +
-                    `/userinfo /serverinfo /roleinfo /channelinfo /avatar /banner\n\n` +
-
-                    `**Staff**\n` +
-                    `/staff /modstats\n\n` +
+                    `/userinfo — User information\n` +
+                    `/serverinfo — Server information\n` +
+                    `/roleinfo — Role information\n` +
+                    `/channelinfo — Channel information\n` +
+                    `/avatar — View an avatar\n` +
+                    `/banner — View a profile banner\n\n` +
 
                     `**Utility**\n` +
-                    `/help /ping /uptime /botinfo /invite /support`
+                    `/help — View commands\n` +
+                    `/ping — Check latency\n` +
+                    `/uptime — View uptime\n` +
+                    `/botinfo — View Ghosty information\n` +
+                    `/invite — Get the bot invite\n` +
+                    `/support — Support information`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- PING ---------------- */
+    /* =====================================================
+       PING
+    ===================================================== */
 
-    if (command === "ping") {
+    if (
+        command === "ping"
+    ) {
+        const apiLatency =
+            Date.now() -
+            interaction.createdTimestamp;
+
         return interaction.reply({
             embeds: [
                 embed(
                     "Ghosty Ping",
-                    `WebSocket latency: **${client.ws.ping}ms**`
+                    `**WebSocket Latency:** ${client.ws.ping}ms\n` +
+                    `**API Response:** ${apiLatency}ms\n` +
+                    `**Status:** Online`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- UPTIME ---------------- */
+    /* =====================================================
+       UPTIME
+    ===================================================== */
 
-    if (command === "uptime") {
+    if (
+        command === "uptime"
+    ) {
         const totalSeconds =
-            Math.floor(process.uptime());
+            Math.floor(
+                process.uptime()
+            );
 
         const days =
             Math.floor(
@@ -1985,78 +2489,117 @@ async function handleCommand(interaction) {
 
         const hours =
             Math.floor(
-                (totalSeconds % 86400) / 3600
+                (totalSeconds % 86400) /
+                3600
             );
 
         const minutes =
             Math.floor(
-                (totalSeconds % 3600) / 60
+                (totalSeconds % 3600) /
+                60
             );
+
+        const seconds =
+            totalSeconds % 60;
 
         return interaction.reply({
             embeds: [
                 embed(
                     "Ghosty Uptime",
-                    `${days} days, ${hours} hours and ${minutes} minutes.`
+                    `Ghosty has been online for:\n\n` +
+                    `**Days:** ${days}\n` +
+                    `**Hours:** ${hours}\n` +
+                    `**Minutes:** ${minutes}\n` +
+                    `**Seconds:** ${seconds}`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- BOT INFO ---------------- */
+    /* =====================================================
+       BOT INFO
+    ===================================================== */
 
-    if (command === "botinfo") {
+    if (
+        command === "botinfo"
+    ) {
+        const totalUsers =
+            client.guilds.cache.reduce(
+                (total, guild) =>
+                    total +
+                    guild.memberCount,
+                0
+            );
+
+        const totalChannels =
+            client.guilds.cache.reduce(
+                (total, guild) =>
+                    total +
+                    guild.channels.cache.size,
+                0
+            );
+
         return interaction.reply({
             embeds: [
                 embed(
                     "Ghosty",
-                    `Ghosty is a Discord moderation and server-management bot built to give staff a simple set of powerful tools.\n\n` +
+                    `Ghosty is a Discord moderation and server-management bot designed to give communities powerful tools through a simple interface.\n\n` +
 
-                    `**Version:** 1.0.0\n` +
+                    `**Version:** 1.1.0\n` +
+                    `**Bot ID:** ${client.user.id}\n` +
                     `**Servers:** ${client.guilds.cache.size}\n` +
+                    `**Users:** ${totalUsers.toLocaleString()}\n` +
+                    `**Channels:** ${totalChannels.toLocaleString()}\n` +
                     `**Commands:** ${commands.length}\n` +
-                    `**Users:** ${client.guilds.cache.reduce(
-                        (total, guild) =>
-                            total + guild.memberCount,
-                        0
-                    )}\n` +
                     `**Discord.js:** ${require("discord.js").version}\n` +
-                    `**Uptime:** ${Math.floor(
-                        process.uptime() / 60
-                    )} minutes`
+                    `**Node.js:** ${process.version}\n` +
+                    `**Uptime:** ${Math.floor(process.uptime() / 60)} minute(s)`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- INVITE ---------------- */
+    /* =====================================================
+       INVITE
+    ===================================================== */
 
-    if (command === "invite") {
+    if (
+        command === "invite"
+    ) {
         const application =
             await client.application.fetch();
+
+        const invite =
+            `https://discord.com/oauth2/authorize?client_id=${application.id}&permissions=8&scope=bot%20applications.commands`;
 
         return interaction.reply({
             embeds: [
                 embed(
                     "Invite Ghosty",
-                    `Use the Discord application install page to add Ghosty to your server.\n\n` +
-                    `[Add Ghosty](https://discord.com/oauth2/authorize?client_id=${application.id}&permissions=8&scope=bot%20applications.commands)`
+                    `Add Ghosty to your Discord server using the link below.\n\n` +
+                    `[Add Ghosty](${invite})\n\n` +
+                    `Ghosty requests the permissions required for its moderation, logging, AutoMod and security features.`
                 )
             ],
             ephemeral: true
         });
     }
 
-    /* ---------------- SUPPORT ---------------- */
+    /* =====================================================
+       SUPPORT
+    ===================================================== */
 
-    if (command === "support") {
+    if (
+        command === "support"
+    ) {
         return interaction.reply({
             embeds: [
                 embed(
                     "Ghosty Support",
-                    "The Ghosty support server has not been configured yet."
+                    `Ghosty support has not been configured yet.\n\n` +
+                    `Use this command as the central place for your support server information once you have one.`
                 )
             ],
             ephemeral: true
@@ -2068,7 +2611,9 @@ async function handleCommand(interaction) {
    SETUP PANEL
 ========================================================= */
 
-async function showSetup(interaction) {
+async function showSetup(
+    interaction
+) {
     const data =
         getGuildData(
             interaction.guild.id
@@ -2077,49 +2622,28 @@ async function showSetup(interaction) {
     const setupEmbed =
         embed(
             "Ghosty Setup",
-            `Configure Ghosty for this server.\n\n` +
+            `Configure Ghosty for **${interaction.guild.name}**.\n\n` +
 
-            `**AutoMod:** ${
-                data.automod.enabled
-                    ? "Enabled"
-                    : "Disabled"
-            }\n` +
+            `**AutoMod:** ${data.automod.enabled ? "Enabled" : "Disabled"}\n` +
+            `**Honeypot:** ${data.honeypot.enabled ? "Enabled" : "Disabled"}\n` +
+            `**Honeypot Channel:** ${data.honeypot.channel ? `<#${data.honeypot.channel}>` : "Not configured"}\n` +
+            `**Log Channel:** ${data.logChannel ? `<#${data.logChannel}>` : "Not configured"}\n` +
+            `**Staff Role:** ${data.staffRole ? `<@&${data.staffRole}>` : "Not configured"}\n` +
+            `**Lockdown:** ${data.lockdown.enabled ? "Active" : "Inactive"}\n\n` +
 
-            `**Honeypot:** ${
-                data.honeypot.enabled
-                    ? "Enabled"
-                    : "Disabled"
-            }\n` +
-
-            `**Honeypot Channel:** ${
-                data.honeypot.channel
-                    ? `<#${data.honeypot.channel}>`
-                    : "Not configured"
-            }\n` +
-
-            `**Log Channel:** ${
-                data.logChannel
-                    ? `<#${data.logChannel}>`
-                    : "Not configured"
-            }\n` +
-
-            `**Staff Role:** ${
-                data.staffRole
-                    ? `<@&${data.staffRole}>`
-                    : "Not configured"
-            }\n\n` +
-
-            `Select a section below to configure Ghosty.`
+            `Use the buttons below to configure individual Ghosty systems.`
         );
 
-    const row1 =
+    const row =
         new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
                     .setCustomId(
                         "setup_automod"
                     )
-                    .setLabel("AutoMod")
+                    .setLabel(
+                        "AutoMod"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     ),
@@ -2128,7 +2652,9 @@ async function showSetup(interaction) {
                     .setCustomId(
                         "setup_honeypot"
                     )
-                    .setLabel("Honeypot")
+                    .setLabel(
+                        "Honeypot"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     ),
@@ -2137,7 +2663,9 @@ async function showSetup(interaction) {
                     .setCustomId(
                         "setup_logs"
                     )
-                    .setLabel("Logging")
+                    .setLabel(
+                        "Logging"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     ),
@@ -2146,15 +2674,21 @@ async function showSetup(interaction) {
                     .setCustomId(
                         "setup_staff"
                     )
-                    .setLabel("Staff")
+                    .setLabel(
+                        "Staff"
+                    )
                     .setStyle(
                         ButtonStyle.Secondary
                     )
             );
 
     return interaction.reply({
-        embeds: [setupEmbed],
-        components: [row1],
+        embeds: [
+            setupEmbed
+        ],
+        components: [
+            row
+        ],
         ephemeral: true
     });
 }
@@ -2163,7 +2697,9 @@ async function showSetup(interaction) {
    AUTOMOD PANEL
 ========================================================= */
 
-async function showAutoMod(interaction) {
+async function showAutoMod(
+    interaction
+) {
     const data =
         getGuildData(
             interaction.guild.id
@@ -2176,7 +2712,9 @@ async function showAutoMod(interaction) {
                     .setCustomId(
                         "automod_enable"
                     )
-                    .setLabel("Enable")
+                    .setLabel(
+                        "Enable"
+                    )
                     .setStyle(
                         ButtonStyle.Success
                     ),
@@ -2185,7 +2723,9 @@ async function showAutoMod(interaction) {
                     .setCustomId(
                         "automod_disable"
                     )
-                    .setLabel("Disable")
+                    .setLabel(
+                        "Disable"
+                    )
                     .setStyle(
                         ButtonStyle.Danger
                     ),
@@ -2194,7 +2734,9 @@ async function showAutoMod(interaction) {
                     .setCustomId(
                         "automod_options"
                     )
-                    .setLabel("Options")
+                    .setLabel(
+                        "Options"
+                    )
                     .setStyle(
                         ButtonStyle.Primary
                     )
@@ -2204,38 +2746,19 @@ async function showAutoMod(interaction) {
         embeds: [
             embed(
                 "Ghosty AutoMod",
-                `**Status:** ${
-                    data.automod.enabled
-                        ? "Enabled"
-                        : "Disabled"
-                }\n\n` +
+                `**Status:** ${data.automod.enabled ? "Enabled" : "Disabled"}\n\n` +
 
-                `**Spam Protection:** ${
-                    data.automod.spam
-                        ? "Enabled"
-                        : "Disabled"
-                }\n` +
+                `**Spam Protection:** ${data.automod.spam ? "Enabled" : "Disabled"}\n` +
+                `**Mention Protection:** ${data.automod.mentions ? "Enabled" : "Disabled"}\n` +
+                `**Invite Protection:** ${data.automod.invites ? "Enabled" : "Disabled"}\n` +
+                `**Caps Protection:** ${data.automod.caps ? "Enabled" : "Disabled"}\n\n` +
 
-                `**Mention Protection:** ${
-                    data.automod.mentions
-                        ? "Enabled"
-                        : "Disabled"
-                }\n` +
-
-                `**Invite Protection:** ${
-                    data.automod.invites
-                        ? "Enabled"
-                        : "Disabled"
-                }\n` +
-
-                `**Caps Protection:** ${
-                    data.automod.caps
-                        ? "Enabled"
-                        : "Disabled"
-                }`
+                `AutoMod automatically removes messages that violate the enabled protection systems.`
             )
         ],
-        components: [row],
+        components: [
+            row
+        ],
         ephemeral: true
     });
 }
@@ -2244,13 +2767,48 @@ async function showAutoMod(interaction) {
    BUTTON HANDLER
 ========================================================= */
 
-async function handleButton(interaction) {
+async function handleButton(
+    interaction
+) {
     const data =
         getGuildData(
             interaction.guild.id
         );
 
-    /* SETUP AUTOMOD */
+    /*
+     * Configuration buttons are administrator-only.
+     */
+
+    const configurationButtons = [
+        "setup_automod",
+        "setup_honeypot",
+        "setup_logs",
+        "setup_staff",
+        "honeypot_enable",
+        "honeypot_disable",
+        "automod_enable",
+        "automod_disable",
+        "automod_options"
+    ];
+
+    if (
+        configurationButtons.includes(
+            interaction.customId
+        )
+    ) {
+        if (!isAdmin(interaction)) {
+            return interaction.reply({
+                embeds: [
+                    errorEmbed(
+                        "You need Administrator permissions to configure Ghosty."
+                    )
+                ],
+                ephemeral: true
+            });
+        }
+    }
+
+    /* ---------------- SETUP AUTOMOD ---------------- */
 
     if (
         interaction.customId ===
@@ -2261,7 +2819,7 @@ async function handleButton(interaction) {
         );
     }
 
-    /* SETUP HONEYPOT */
+    /* ---------------- SETUP HONEYPOT ---------------- */
 
     if (
         interaction.customId ===
@@ -2286,7 +2844,9 @@ async function handleButton(interaction) {
                         .setCustomId(
                             "honeypot_enable"
                         )
-                        .setLabel("Enable")
+                        .setLabel(
+                            "Enable"
+                        )
                         .setStyle(
                             ButtonStyle.Success
                         ),
@@ -2295,7 +2855,9 @@ async function handleButton(interaction) {
                         .setCustomId(
                             "honeypot_disable"
                         )
-                        .setLabel("Disable")
+                        .setLabel(
+                            "Disable"
+                        )
                         .setStyle(
                             ButtonStyle.Danger
                         )
@@ -2305,21 +2867,10 @@ async function handleButton(interaction) {
             embeds: [
                 embed(
                     "Honeypot Configuration",
-                    `**Status:** ${
-                        data.honeypot.enabled
-                            ? "Enabled"
-                            : "Disabled"
-                    }\n` +
-
-                    `**Channel:** ${
-                        data.honeypot.channel
-                            ? `<#${data.honeypot.channel}>`
-                            : "Not configured"
-                    }\n` +
-
+                    `**Status:** ${data.honeypot.enabled ? "Enabled" : "Disabled"}\n` +
+                    `**Channel:** ${data.honeypot.channel ? `<#${data.honeypot.channel}>` : "Not configured"}\n` +
                     `**Kicks:** ${data.honeypot.kicks}\n\n` +
-
-                    `Select a channel below. Any message sent in the configured honeypot channel will be deleted and the sender will be kicked when Ghosty can do so.`
+                    `Select a channel below. Messages sent in the configured honeypot channel will be deleted and the sender will be kicked when Ghosty can do so.`
                 )
             ],
             components: [
@@ -2332,13 +2883,15 @@ async function handleButton(interaction) {
         });
     }
 
-    /* HONEYPOT ENABLE */
+    /* ---------------- HONEYPOT ENABLE ---------------- */
 
     if (
         interaction.customId ===
         "honeypot_enable"
     ) {
-        if (!data.honeypot.channel) {
+        if (
+            !data.honeypot.channel
+        ) {
             return interaction.reply({
                 embeds: [
                     errorEmbed(
@@ -2349,41 +2902,46 @@ async function handleButton(interaction) {
             });
         }
 
-        data.honeypot.enabled = true;
+        data.honeypot.enabled =
+            true;
+
         saveData();
 
         return interaction.update({
             embeds: [
                 successEmbed(
                     "Honeypot Enabled",
-                    `The honeypot is now active in <#${data.honeypot.channel}>.`
+                    `The honeypot is now active in <#${data.honeypot.channel}>.\n\n` +
+                    `Messages sent there will be deleted and the sender will be kicked when possible.`
                 )
             ],
             components: []
         });
     }
 
-    /* HONEYPOT DISABLE */
+    /* ---------------- HONEYPOT DISABLE ---------------- */
 
     if (
         interaction.customId ===
         "honeypot_disable"
     ) {
-        data.honeypot.enabled = false;
+        data.honeypot.enabled =
+            false;
+
         saveData();
 
         return interaction.update({
             embeds: [
                 successEmbed(
                     "Honeypot Disabled",
-                    "The honeypot has been disabled."
+                    "The honeypot has been disabled. Messages in the configured channel will no longer trigger the honeypot action."
                 )
             ],
             components: []
         });
     }
 
-    /* SETUP LOGGING */
+    /* ---------------- SETUP LOGGING ---------------- */
 
     if (
         interaction.customId ===
@@ -2405,21 +2963,20 @@ async function handleButton(interaction) {
             embeds: [
                 embed(
                     "Logging Configuration",
-                    `**Current Channel:** ${
-                        data.logChannel
-                            ? `<#${data.logChannel}>`
-                            : "Not configured"
-                    }\n\nSelect the channel Ghosty should use for logs.`
+                    `**Current Channel:** ${data.logChannel ? `<#${data.logChannel}>` : "Not configured"}\n\n` +
+                    `Select the channel Ghosty should use for moderation and security logs.`
                 )
             ],
             components: [
                 new ActionRowBuilder()
-                    .addComponents(menu)
+                    .addComponents(
+                        menu
+                    )
             ]
         });
     }
 
-    /* SETUP STAFF */
+    /* ---------------- SETUP STAFF ---------------- */
 
     if (
         interaction.customId ===
@@ -2440,27 +2997,29 @@ async function handleButton(interaction) {
             embeds: [
                 embed(
                     "Staff Configuration",
-                    `**Current Staff Role:** ${
-                        data.staffRole
-                            ? `<@&${data.staffRole}>`
-                            : "Not configured"
-                    }\n\nSelect the role that should count as Ghosty staff.`
+                    `**Current Staff Role:** ${data.staffRole ? `<@&${data.staffRole}>` : "Not configured"}\n\n` +
+                    `Select the role that should count as Ghosty staff.\n\n` +
+                    `Members with this role can use Ghosty's staff moderation commands.`
                 )
             ],
             components: [
                 new ActionRowBuilder()
-                    .addComponents(menu)
+                    .addComponents(
+                        menu
+                    )
             ]
         });
     }
 
-    /* AUTOMOD ENABLE */
+    /* ---------------- AUTOMOD ENABLE ---------------- */
 
     if (
         interaction.customId ===
         "automod_enable"
     ) {
-        data.automod.enabled = true;
+        data.automod.enabled =
+            true;
+
         saveData();
 
         return interaction.update({
@@ -2474,13 +3033,15 @@ async function handleButton(interaction) {
         });
     }
 
-    /* AUTOMOD DISABLE */
+    /* ---------------- AUTOMOD DISABLE ---------------- */
 
     if (
         interaction.customId ===
         "automod_disable"
     ) {
-        data.automod.enabled = false;
+        data.automod.enabled =
+            false;
+
         saveData();
 
         return interaction.update({
@@ -2494,7 +3055,7 @@ async function handleButton(interaction) {
         });
     }
 
-    /* AUTOMOD OPTIONS */
+    /* ---------------- AUTOMOD OPTIONS ---------------- */
 
     if (
         interaction.customId ===
@@ -2510,20 +3071,28 @@ async function handleButton(interaction) {
                 )
                 .addOptions(
                     {
-                        label: "Spam Protection",
-                        value: "spam"
+                        label:
+                            "Spam Protection",
+                        value:
+                            "spam"
                     },
                     {
-                        label: "Mention Protection",
-                        value: "mentions"
+                        label:
+                            "Mention Protection",
+                        value:
+                            "mentions"
                     },
                     {
-                        label: "Invite Protection",
-                        value: "invites"
+                        label:
+                            "Invite Protection",
+                        value:
+                            "invites"
                     },
                     {
-                        label: "Caps Protection",
-                        value: "caps"
+                        label:
+                            "Caps Protection",
+                        value:
+                            "caps"
                     }
                 );
 
@@ -2531,12 +3100,18 @@ async function handleButton(interaction) {
             embeds: [
                 embed(
                     "AutoMod Options",
-                    "Select a protection below to enable or disable it."
+                    `Select a protection below to toggle it.\n\n` +
+                    `**Spam:** ${data.automod.spam ? "Enabled" : "Disabled"}\n` +
+                    `**Mentions:** ${data.automod.mentions ? "Enabled" : "Disabled"}\n` +
+                    `**Invites:** ${data.automod.invites ? "Enabled" : "Disabled"}\n` +
+                    `**Caps:** ${data.automod.caps ? "Enabled" : "Disabled"}`
                 )
             ],
             components: [
                 new ActionRowBuilder()
-                    .addComponents(menu)
+                    .addComponents(
+                        menu
+                    )
             ]
         });
     }
@@ -2546,7 +3121,20 @@ async function handleButton(interaction) {
    CHANNEL SELECT HANDLER
 ========================================================= */
 
-async function handleChannelSelect(interaction) {
+async function handleChannelSelect(
+    interaction
+) {
+    if (!isAdmin(interaction)) {
+        return interaction.reply({
+            embeds: [
+                errorEmbed(
+                    "You need Administrator permissions to configure Ghosty."
+                )
+            ],
+            ephemeral: true
+        });
+    }
+
     const data =
         getGuildData(
             interaction.guild.id
@@ -2554,6 +3142,8 @@ async function handleChannelSelect(interaction) {
 
     const channelId =
         interaction.values[0];
+
+    /* ---------------- HONEYPOT ---------------- */
 
     if (
         interaction.customId ===
@@ -2568,12 +3158,15 @@ async function handleChannelSelect(interaction) {
             embeds: [
                 successEmbed(
                     "Honeypot Channel Set",
-                    `The honeypot channel has been set to <#${channelId}>.\n\nUse the Enable button in the honeypot configuration to activate it.`
+                    `The honeypot channel has been set to <#${channelId}>.\n\n` +
+                    `Use the Enable button to activate the honeypot.`
                 )
             ],
             components: []
         });
     }
+
+    /* ---------------- LOGGING ---------------- */
 
     if (
         interaction.customId ===
@@ -2588,7 +3181,7 @@ async function handleChannelSelect(interaction) {
             embeds: [
                 successEmbed(
                     "Logging Channel Set",
-                    `Ghosty will now send logs to <#${channelId}>.`
+                    `Ghosty will now send moderation and security logs to <#${channelId}>.`
                 )
             ],
             components: []
@@ -2600,7 +3193,20 @@ async function handleChannelSelect(interaction) {
    ROLE SELECT HANDLER
 ========================================================= */
 
-async function handleRoleSelect(interaction) {
+async function handleRoleSelect(
+    interaction
+) {
+    if (!isAdmin(interaction)) {
+        return interaction.reply({
+            embeds: [
+                errorEmbed(
+                    "You need Administrator permissions to configure Ghosty."
+                )
+            ],
+            ephemeral: true
+        });
+    }
+
     const data =
         getGuildData(
             interaction.guild.id
@@ -2631,11 +3237,19 @@ async function handleRoleSelect(interaction) {
    STRING SELECT HANDLER
 ========================================================= */
 
-async function handleStringSelect(interaction) {
-    const data =
-        getGuildData(
-            interaction.guild.id
-        );
+async function handleStringSelect(
+    interaction
+) {
+    if (!isAdmin(interaction)) {
+        return interaction.reply({
+            embeds: [
+                errorEmbed(
+                    "You need Administrator permissions to configure Ghosty."
+                )
+            ],
+            ephemeral: true
+        });
+    }
 
     if (
         interaction.customId !==
@@ -2644,23 +3258,53 @@ async function handleStringSelect(interaction) {
         return;
     }
 
+    const data =
+        getGuildData(
+            interaction.guild.id
+        );
+
     const option =
         interaction.values[0];
+
+    if (
+        ![
+            "spam",
+            "mentions",
+            "invites",
+            "caps"
+        ].includes(option)
+    ) {
+        return interaction.reply({
+            embeds: [
+                errorEmbed(
+                    "That AutoMod option is invalid."
+                )
+            ],
+            ephemeral: true
+        });
+    }
 
     data.automod[option] =
         !data.automod[option];
 
     saveData();
 
+    const names = {
+        spam: "Spam",
+        mentions: "Mention",
+        invites: "Invite",
+        caps: "Caps"
+    };
+
     return interaction.update({
         embeds: [
             successEmbed(
                 "AutoMod Updated",
-                `**${option} protection** is now ${
+                `**${names[option]} Protection** is now **${
                     data.automod[option]
-                        ? "enabled"
-                        : "disabled"
-                }.`
+                        ? "Enabled"
+                        : "Disabled"
+                }**.`
             )
         ],
         components: []
@@ -2668,10 +3312,12 @@ async function handleStringSelect(interaction) {
 }
 
 /* =========================================================
-   TOKEN
+   TOKEN CHECK
 ========================================================= */
 
-if (!process.env.DISCORD_TOKEN) {
+if (
+    !process.env.DISCORD_TOKEN
+) {
     console.error(
         "DISCORD_TOKEN is missing from environment variables."
     );
