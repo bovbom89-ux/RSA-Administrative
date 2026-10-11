@@ -2,12 +2,13 @@
 {
   "name": "london-uxbridge-bot",
   "version": "1.0.0",
-  "description": "London, Uxbridge Discord utility and moderation bot",
-  "main": "index.js",
+  "description": "London, Uxbridge Discord utility bot",
+  "main": "src/index.js",
   "scripts": {
-    "start": "node index.js"
+    "start": "node src/index.js"
   },
   "dependencies": {
-    "discord.js": "^14.19.3"
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7"
   }
 }
