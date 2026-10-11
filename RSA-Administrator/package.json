@@ -1,12 +1,16 @@
 {
-  "name": "ghosty",
+  "name": "london-uxbridge-bot",
   "version": "1.0.0",
+  "description": "Official community bot for London, Uxbridge",
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js"
   },
+  "engines": {
+    "node": ">=20"
+  },
   "dependencies": {
-    "discord.js": "^14.25.1",
-    "dotenv": "^17.2.3"
+    "discord.js": "^14.19.3",
+    "dotenv": "^16.4.7"
   }
 }
