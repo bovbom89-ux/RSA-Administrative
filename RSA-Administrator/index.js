@@ -1,8 +1,8 @@
+
 require("dotenv").config();
 
 const fs = require("node:fs");
 const path = require("node:path");
-
 const {
   Client,
   GatewayIntentBits,
@@ -20,68 +20,71 @@ const {
 const client = new Client({
   intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
-    GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages
   ]
 });
 
-const BRAND = 0x1F4E79;
+const BRAND_COLOR = 0x1F4E79;
 const OFFICE_URL = "https://discord.gg/DeuwuZFXN";
 const DATA_DIR = path.join(__dirname, "..", "data");
 
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
-function readData(name, fallback = []) {
-  const file = path.join(DATA_DIR, name);
+function readData(filename, fallback = []) {
+  const filepath = path.join(DATA_DIR, filename);
 
-  if (!fs.existsSync(file)) {
-    fs.writeFileSync(file, JSON.stringify(fallback, null, 2));
+  if (!fs.existsSync(filepath)) {
+    fs.writeFileSync(filepath, JSON.stringify(fallback, null, 2));
+    return fallback;
   }
 
   try {
-    return JSON.parse(fs.readFileSync(file, "utf8"));
-  } catch {
+    return JSON.parse(fs.readFileSync(filepath, "utf8"));
+  } catch (error) {
+    console.error(`Could not read ${filename}:`, error);
     return fallback;
   }
 }
 
-function writeData(name, data) {
-  fs.writeFileSync(
-    path.join(DATA_DIR, name),
-    JSON.stringify(data, null, 2)
-  );
+function writeData(filename, value) {
+  const filepath = path.join(DATA_DIR, filename);
+  const tempPath = `${filepath}.tmp`;
+
+  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
+  fs.renameSync(tempPath, filepath);
 }
 
-function makeEmbed(title, sections = [], footer = "London, Uxbridge") {
-  const description = sections
-    .filter(Boolean)
-    .join("\n\n━━━━━━━━━━━━━━━━━━\n\n");
-
+function makeEmbed(title, sections = []) {
   return new EmbedBuilder()
-    .setColor(BRAND)
+    .setColor(BRAND_COLOR)
     .setTitle(title)
-    .setDescription(description || "No information available.")
-    .setFooter({ text: footer })
+    .setDescription(
+      sections.filter(Boolean).join("\n\n━━━━━━━━━━━━━━━━━━\n\n") ||
+      "No information available."
+    )
+    .setFooter({ text: "London, Uxbridge" })
     .setTimestamp();
 }
 
 function isAdmin(interaction) {
-  return interaction.memberPermissions?.has(
-    PermissionFlagsBits.Administrator
+  return Boolean(
+    interaction.memberPermissions?.has(
+      PermissionFlagsBits.Administrator
+    )
   );
 }
 
 function hasRole(interaction, envName) {
-  const roleId = process.env[envName];
-
-  if (!roleId) return false;
   if (isAdmin(interaction)) return true;
+
+  const roleId = process.env[envName];
+  if (!roleId) return false;
 
   return interaction.member?.roles?.cache?.has(roleId) ?? false;
 }
 
-function deny() {
+function denied() {
   return {
     embeds: [
       makeEmbed("Permission denied", [
@@ -92,49 +95,74 @@ function deny() {
   };
 }
 
-async function sendToChannel(channelId, message) {
-  if (!channelId) {
-    throw new Error("The destination channel ID has not been configured.");
+async function getGuild() {
+  if (process.env.DISCORD_GUILD_ID) {
+    return client.guilds.fetch(process.env.DISCORD_GUILD_ID);
   }
 
-  const channel = await client.channels.fetch(channelId);
+  const guilds = await client.guilds.fetch();
 
-  if (!channel?.isTextBased() || !channel.send) {
-    throw new Error("The configured destination is not a text channel.");
+  if (guilds.size !== 1) {
+    throw new Error(
+      "Set DISCORD_GUILD_ID when the bot is in multiple servers."
+    );
   }
 
-  return channel.send(message);
+  return client.guilds.fetch(guilds.first().id);
 }
 
-async function logAction(interaction, action, target, reason) {
+async function sendToChannel(channelName, payload) {
+  const guild = await getGuild();
+  const channels = await guild.channels.fetch();
+
+  const channel = channels.find(
+    item =>
+      item &&
+      item.name.toLowerCase() === channelName.toLowerCase() &&
+      item.isTextBased() &&
+      typeof item.send === "function"
+  );
+
+  if (!channel) {
+    throw new Error(
+      `Channel #${channelName} was not found in ${guild.name}.`
+    );
+  }
+
+  return channel.send(payload);
+}
+
+async function recordModeration(interaction, action, user, reason) {
   const logs = readData("modlogs.json", []);
 
   logs.push({
     action,
-    target,
+    userId: user.id,
+    username: user.tag,
     reason,
-    moderator: interaction.user.id,
-    guild: interaction.guildId,
+    moderatorId: interaction.user.id,
+    moderator: interaction.user.tag,
+    guildId: interaction.guildId,
     timestamp: new Date().toISOString()
   });
 
   writeData("modlogs.json", logs);
 
-  if (process.env.MODLOG_CHANNEL_ID) {
-    await sendToChannel(process.env.MODLOG_CHANNEL_ID, {
-      embeds: [
-        makeEmbed("Moderation record", [
-          `**Action**\n${action}`,
-          `**Member**\n${target}`,
-          `**Moderator**\n${interaction.user.tag}`,
-          `**Reason**\n${reason || "No reason supplied"}`
-        ])
-      ]
-    }).catch(console.error);
-  }
+  await sendToChannel("mod-logs", {
+    embeds: [
+      makeEmbed("Moderation record", [
+        `**Action**\n${action}`,
+        `**Member**\n${user.tag} (${user.id})`,
+        `**Moderator**\n${interaction.user.tag}`,
+        `**Reason**\n${reason || "No reason supplied"}`
+      ])
+    ]
+  }).catch(error => {
+    console.error("Moderation log delivery failed:", error.message);
+  });
 }
 
-async function safeReply(interaction, payload) {
+async function replySafely(interaction, payload) {
   if (interaction.deferred || interaction.replied) {
     return interaction.editReply(payload);
   }
@@ -145,37 +173,32 @@ async function safeReply(interaction, payload) {
 const commands = [
   new SlashCommandBuilder()
     .setName("information")
-    .setDescription("View London, Uxbridge community information"),
+    .setDescription("View community information"),
 
   new SlashCommandBuilder()
     .setName("rules")
-    .setDescription("View the community rules"),
+    .setDescription("View community rules"),
 
   new SlashCommandBuilder()
     .setName("help")
-    .setDescription("Get help from the Community Relations Office"),
+    .setDescription("Get help from Community Relations Office"),
 
   new SlashCommandBuilder()
     .setName("ping")
-    .setDescription("Check the bot response time"),
+    .setDescription("Check bot response time"),
 
   new SlashCommandBuilder()
     .setName("host-shift")
     .setDescription("Start a timed roleplay shift")
-    .addStringOption(o =>
-      o.setName("department")
-        .setDescription("Department hosting the shift")
-        .setRequired(true))
-    .addStringOption(o =>
-      o.setName("location")
-        .setDescription("Shift location")
-        .setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("duration")
-        .setDescription("Duration in minutes")
-        .setMinValue(5)
-        .setMaxValue(360)
-        .setRequired(false)),
+    .addStringOption(o => o.setName("department")
+      .setDescription("Department hosting the shift")
+      .setRequired(true).setMaxLength(100))
+    .addStringOption(o => o.setName("location")
+      .setDescription("Shift location")
+      .setRequired(true).setMaxLength(150))
+    .addIntegerOption(o => o.setName("duration")
+      .setDescription("Duration in minutes; defaults to 60")
+      .setMinValue(5).setMaxValue(360)),
 
   new SlashCommandBuilder()
     .setName("shift-stats")
@@ -184,123 +207,112 @@ const commands = [
   new SlashCommandBuilder()
     .setName("military-operation")
     .setDescription("Start a timed military operation")
-    .addStringOption(o =>
-      o.setName("operation")
-        .setDescription("Operation name")
-        .setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("duration")
-        .setDescription("Duration in minutes")
-        .setMinValue(5)
-        .setMaxValue(360)
-        .setRequired(false)),
+    .addStringOption(o => o.setName("operation")
+      .setDescription("Operation name and location")
+      .setRequired(true).setMaxLength(150))
+    .addIntegerOption(o => o.setName("duration")
+      .setDescription("Duration in minutes; defaults to 60")
+      .setMinValue(5).setMaxValue(360)),
 
   new SlashCommandBuilder()
     .setName("training-session")
     .setDescription("Announce a department training session")
-    .addStringOption(o =>
-      o.setName("department")
-        .setDescription("Department running training")
-        .setRequired(true))
-    .addStringOption(o =>
-      o.setName("details")
-        .setDescription("Training details")
-        .setRequired(true)),
+    .addStringOption(o => o.setName("department")
+      .setDescription("Department")
+      .setRequired(true).setMaxLength(100))
+    .addStringOption(o => o.setName("details")
+      .setDescription("Training details")
+      .setRequired(true).setMaxLength(1500)),
 
   new SlashCommandBuilder()
     .setName("warn")
-    .setDescription("Warn a member")
-    .addUserOption(o =>
-      o.setName("member").setDescription("Member to warn").setRequired(true))
-    .addStringOption(o =>
-      o.setName("reason").setDescription("Reason").setRequired(true)),
+    .setDescription("Record a warning")
+    .addUserOption(o => o.setName("member")
+      .setDescription("Member to warn").setRequired(true))
+    .addStringOption(o => o.setName("reason")
+      .setDescription("Reason").setRequired(true).setMaxLength(1000)),
 
   new SlashCommandBuilder()
     .setName("timeout")
     .setDescription("Timeout a member")
-    .addUserOption(o =>
-      o.setName("member").setDescription("Member to timeout").setRequired(true))
-    .addIntegerOption(o =>
-      o.setName("minutes").setDescription("Timeout length in minutes")
-        .setMinValue(1).setMaxValue(40320).setRequired(true))
-    .addStringOption(o =>
-      o.setName("reason").setDescription("Reason").setRequired(true)),
+    .addUserOption(o => o.setName("member")
+      .setDescription("Member to timeout").setRequired(true))
+    .addIntegerOption(o => o.setName("minutes")
+      .setDescription("Duration in minutes").setRequired(true)
+      .setMinValue(1).setMaxValue(40320))
+    .addStringOption(o => o.setName("reason")
+      .setDescription("Reason").setRequired(true).setMaxLength(1000)),
 
   new SlashCommandBuilder()
     .setName("kick")
     .setDescription("Kick a member")
-    .addUserOption(o =>
-      o.setName("member").setDescription("Member to kick").setRequired(true))
-    .addStringOption(o =>
-      o.setName("reason").setDescription("Reason").setRequired(true)),
+    .addUserOption(o => o.setName("member")
+      .setDescription("Member to kick").setRequired(true))
+    .addStringOption(o => o.setName("reason")
+      .setDescription("Reason").setRequired(true).setMaxLength(1000)),
 
   new SlashCommandBuilder()
     .setName("ban")
     .setDescription("Ban a member")
-    .addUserOption(o =>
-      o.setName("member").setDescription("Member to ban").setRequired(true))
-    .addStringOption(o =>
-      o.setName("reason").setDescription("Reason").setRequired(true)),
+    .addUserOption(o => o.setName("member")
+      .setDescription("Member to ban").setRequired(true))
+    .addStringOption(o => o.setName("reason")
+      .setDescription("Reason").setRequired(true).setMaxLength(1000)),
 
   new SlashCommandBuilder()
     .setName("purge")
     .setDescription("Delete recent messages")
-    .addIntegerOption(o =>
-      o.setName("amount").setDescription("Number of messages")
-        .setMinValue(1).setMaxValue(100).setRequired(true)),
+    .addIntegerOption(o => o.setName("amount")
+      .setDescription("Number of messages").setRequired(true)
+      .setMinValue(1).setMaxValue(100)),
 
   new SlashCommandBuilder()
     .setName("userinfo")
     .setDescription("View member information")
-    .addUserOption(o =>
-      o.setName("member").setDescription("Member to inspect").setRequired(true)),
+    .addUserOption(o => o.setName("member")
+      .setDescription("Member to inspect").setRequired(true)),
 
   new SlashCommandBuilder()
     .setName("modlogs")
-    .setDescription("View recent moderation records")
-    .addUserOption(o =>
-      o.setName("member").setDescription("Filter by member").setRequired(false)),
+    .setDescription("View moderation records")
+    .addUserOption(o => o.setName("member")
+      .setDescription("Optional member filter")),
 
   new SlashCommandBuilder()
     .setName("staff-report")
     .setDescription("Submit a staff conduct report")
-    .addUserOption(o =>
-      o.setName("staff").setDescription("Staff member being reported").setRequired(true))
-    .addStringOption(o =>
-      o.setName("details").setDescription("Report details").setRequired(true)),
+    .addUserOption(o => o.setName("staff")
+      .setDescription("Staff member being reported").setRequired(true))
+    .addStringOption(o => o.setName("details")
+      .setDescription("Report details").setRequired(true).setMaxLength(1500)),
 
   new SlashCommandBuilder()
     .setName("report")
-    .setDescription("Report a community concern")
-    .addStringOption(o =>
-      o.setName("details").setDescription("Report details").setRequired(true)),
+    .setDescription("Submit a community report")
+    .addStringOption(o => o.setName("details")
+      .setDescription("Report details").setRequired(true).setMaxLength(1500)),
 
   new SlashCommandBuilder()
     .setName("suggest")
     .setDescription("Submit a community suggestion")
-    .addStringOption(o =>
-      o.setName("suggestion").setDescription("Your suggestion").setRequired(true)),
+    .addStringOption(o => o.setName("suggestion")
+      .setDescription("Your suggestion").setRequired(true).setMaxLength(1500)),
 
   new SlashCommandBuilder()
     .setName("feedback")
     .setDescription("Send community feedback")
-    .addStringOption(o =>
-      o.setName("message").setDescription("Your feedback").setRequired(true)),
+    .addStringOption(o => o.setName("message")
+      .setDescription("Your feedback").setRequired(true).setMaxLength(1500)),
 
   new SlashCommandBuilder()
     .setName("announce")
     .setDescription("Publish a community announcement")
-    .addStringOption(o =>
-      o.setName("title").setDescription("Announcement title").setRequired(true))
-    .addStringOption(o =>
-      o.setName("message").setDescription("Announcement content").setRequired(true)),
-
-  new SlashCommandBuilder()
-    .setName("serverinfo")
-    .setDescription("View server information")
+    .addStringOption(o => o.setName("title")
+      .setDescription("Announcement title").setRequired(true).setMaxLength(200))
+    .addStringOption(o => o.setName("message")
+      .setDescription("Announcement content").setRequired(true).setMaxLength(3500))
 ].map(command => command.toJSON());
 
-// Register commands on startup.
 async function registerCommands() {
   const rest = new REST({ version: "10" })
     .setToken(process.env.DISCORD_TOKEN);
@@ -313,11 +325,9 @@ async function registerCommands() {
     : Routes.applicationCommands(process.env.DISCORD_CLIENT_ID);
 
   await rest.put(route, { body: commands });
-
   console.log(`Registered ${commands.length} slash commands.`);
 }
 
-// Persistent timed shifts.
 const shiftTimers = new Map();
 
 function scheduleShiftEnd(shift) {
@@ -328,13 +338,19 @@ function scheduleShiftEnd(shift) {
   const remaining = shift.endsAt - Date.now();
 
   if (remaining <= 0) {
-    finishShift(shift.id).catch(console.error);
+    void finishShift(shift.id);
     return;
   }
 
   const timer = setTimeout(() => {
-    finishShift(shift.id).catch(console.error);
-  }, Math.min(remaining, 2147483647));
+    shiftTimers.delete(shift.id);
+
+    if (shift.endsAt <= Date.now()) {
+      void finishShift(shift.id);
+    } else {
+      scheduleShiftEnd(shift);
+    }
+  }, Math.min(remaining, 2147000000));
 
   shiftTimers.set(shift.id, timer);
 }
@@ -357,31 +373,37 @@ async function finishShift(id) {
   writeData("shifts.json", shifts);
   shiftTimers.delete(id);
 
-  await sendToChannel(process.env.SHIFT_CHANNEL_ID, {
+  await sendToChannel("staff-shifts", {
     embeds: [
-      makeEmbed("Shift concluded", [
-        `**Department**\n${shift.department}`,
-        `**Location**\n${shift.location}`,
-        `**Host**\n<@${shift.hostId}>`,
-        `**Duration**\n${shift.duration} minutes`,
-        "The scheduled shift has now concluded."
-      ])
+      makeEmbed(
+        shift.type === "military"
+          ? "Military operation concluded"
+          : "Shift concluded",
+        [
+          `**Department**\n${shift.department}`,
+          `**Location**\n${shift.location}`,
+          `**Host**\n<@${shift.hostId}>`,
+          `**Duration**\n${shift.duration} minutes`,
+          "The scheduled session has concluded."
+        ]
+      )
     ]
   });
 }
 
-function startShift({ type, department, location, hostId, duration }) {
+function startActivity(type, department, location, hostId, duration) {
   const shifts = readData("shifts.json", []);
+  const now = Date.now();
 
   const shift = {
-    id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+    id: `${now}-${Math.random().toString(36).slice(2, 8)}`,
     type,
     department,
     location,
     hostId,
     duration,
-    startedAt: Date.now(),
-    endsAt: Date.now() + duration * 60_000,
+    startedAt: now,
+    endsAt: now + duration * 60000,
     ended: false
   };
 
@@ -403,27 +425,27 @@ client.once("ready", () => {
 client.on("interactionCreate", async interaction => {
   if (!interaction.isChatInputCommand()) return;
 
-  const { commandName } = interaction;
+  const command = interaction.commandName;
 
   try {
-    if (commandName === "information") {
+    if (command === "information") {
       return interaction.reply({
         embeds: [makeEmbed("London, Uxbridge", [
           "**Community information**\nA British Roblox roleplay community based in Uxbridge, West London.",
-          "**Roleplay departments**\nMetropolitan Police Service, London Fire Brigade, London Ambulance Service, British Transport Police, British Army, civilian services and private businesses.",
-          "**Community standards**\nRespect other members, follow staff instructions and keep roleplay fair and organised.",
-          "**Disclaimer**\nThis is a fictional Roblox roleplay community and is not affiliated with real public services or government bodies."
+          "**Roleplay services**\nMetropolitan Police Service, London Fire Brigade, London Ambulance Service, British Transport Police, British Army, civilian services and private businesses.",
+          "**Community standards**\nRespect other members, follow staff instructions and keep roleplay organised.",
+          "**Disclaimer**\nThis is a fictional Roblox roleplay community and is not affiliated with real government bodies or public services."
         ])]
       });
     }
 
-    if (commandName === "rules") {
+    if (command === "rules") {
       return interaction.reply({
         embeds: [makeEmbed("Community rules", [
           "**01 — Respect**\nTreat all members respectfully.",
           "**02 — Staff instructions**\nFollow reasonable moderation instructions.",
-          "**03 — Roleplay conduct**\nNo random deathmatching, vehicle deathmatching, fail roleplay, metagaming or powergaming.",
-          "**04 — Exploiting**\nExploiting, cheating and abuse of bugs are prohibited.",
+          "**03 — Roleplay conduct**\nRandom deathmatching, vehicle deathmatching, fail roleplay, metagaming and powergaming are prohibited.",
+          "**04 — Exploiting**\nCheating, exploiting and abusing bugs are prohibited.",
           "**05 — Authority**\nDo not abuse department roles or powers.",
           "**06 — Advertising**\nDo not spam or advertise without permission.",
           "**07 — Impersonation**\nDo not impersonate staff or public-service personnel.",
@@ -433,7 +455,7 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "help") {
+    if (command === "help") {
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setLabel("Join Community Relations Office")
@@ -450,7 +472,7 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "ping") {
+    if (command === "ping") {
       return interaction.reply({
         embeds: [makeEmbed("Bot status", [
           `**WebSocket latency**\n${client.ws.ping} ms`
@@ -459,26 +481,22 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "host-shift") {
+    if (command === "host-shift") {
       if (!hasRole(interaction, "SHIFT_HOST_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const department = interaction.options.getString("department", true);
       const location = interaction.options.getString("location", true);
       const duration = interaction.options.getInteger("duration") ?? 60;
 
-      const shift = startShift({
-        type: "shift",
-        department,
-        location,
-        hostId: interaction.user.id,
-        duration
-      });
+      const shift = startActivity(
+        "shift", department, location, interaction.user.id, duration
+      );
 
-      await sendToChannel(process.env.SHIFT_CHANNEL_ID, {
+      await sendToChannel("staff-shifts", {
         embeds: [makeEmbed("Shift now open", [
           `**Department**\n${department}`,
           `**Location**\n${location}`,
@@ -490,31 +508,26 @@ client.on("interactionCreate", async interaction => {
 
       return interaction.editReply({
         embeds: [makeEmbed("Shift started", [
-          `Your shift has been scheduled to end <t:${Math.floor(shift.endsAt / 1000)}:R>.`
-        ])],
-        flags: MessageFlags.Ephemeral
+          `The shift is scheduled to conclude <t:${Math.floor(shift.endsAt / 1000)}:R>.`
+        ])]
       });
     }
 
-    if (commandName === "military-operation") {
+    if (command === "military-operation") {
       if (!hasRole(interaction, "MILITARY_HOST_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
-      await interaction.deferReply();
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
       const operation = interaction.options.getString("operation", true);
       const duration = interaction.options.getInteger("duration") ?? 60;
 
-      const shift = startShift({
-        type: "military",
-        department: "British Army",
-        location: operation,
-        hostId: interaction.user.id,
-        duration
-      });
+      const shift = startActivity(
+        "military", "British Army", operation, interaction.user.id, duration
+      );
 
-      await sendToChannel(process.env.SHIFT_CHANNEL_ID, {
+      await sendToChannel("staff-shifts", {
         embeds: [makeEmbed("Military operation opened", [
           `**Operation**\n${operation}`,
           `**Host**\n<@${interaction.user.id}>`,
@@ -526,39 +539,35 @@ client.on("interactionCreate", async interaction => {
       return interaction.editReply({
         embeds: [makeEmbed("Operation scheduled", [
           `The operation is scheduled to conclude <t:${Math.floor(shift.endsAt / 1000)}:R>.`
-        ])],
-        flags: MessageFlags.Ephemeral
+        ])]
       });
     }
 
-    if (commandName === "shift-stats") {
+    if (command === "shift-stats") {
       if (!hasRole(interaction, "SHIFT_HOST_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const shifts = readData("shifts.json", []);
-      const completed = shifts.filter(s => s.ended).length;
-      const active = shifts.filter(s => !s.ended).length;
-
       return interaction.reply({
         embeds: [makeEmbed("Shift statistics", [
           `**Total recorded**\n${shifts.length}`,
-          `**Active**\n${active}`,
-          `**Completed**\n${completed}`
+          `**Active**\n${shifts.filter(s => !s.ended).length}`,
+          `**Completed**\n${shifts.filter(s => s.ended).length}`
         ])],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    if (commandName === "training-session") {
+    if (command === "training-session") {
       if (!hasRole(interaction, "DEPARTMENT_STAFF_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const department = interaction.options.getString("department", true);
       const details = interaction.options.getString("details", true);
 
-      await sendToChannel(process.env.SHIFT_CHANNEL_ID, {
+      await sendToChannel("staff-shifts", {
         embeds: [makeEmbed("Training session announced", [
           `**Department**\n${department}`,
           `**Organiser**\n<@${interaction.user.id}>`,
@@ -568,21 +577,21 @@ client.on("interactionCreate", async interaction => {
 
       return interaction.reply({
         embeds: [makeEmbed("Training session announced", [
-          "The training announcement has been published."
+          "The announcement has been published."
         ])],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    if (commandName === "warn") {
+    if (command === "warn") {
       if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const user = interaction.options.getUser("member", true);
       const reason = interaction.options.getString("reason", true);
 
-      await logAction(interaction, "Warning", user.tag, reason);
+      await recordModeration(interaction, "Warning", user, reason);
 
       return interaction.reply({
         embeds: [makeEmbed("Warning recorded", [
@@ -593,9 +602,9 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "timeout") {
+    if (command === "timeout") {
       if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const user = interaction.options.getUser("member", true);
@@ -603,17 +612,26 @@ client.on("interactionCreate", async interaction => {
       const reason = interaction.options.getString("reason", true);
       const member = await interaction.guild.members.fetch(user.id);
 
-      if (!member.moderatable) {
+      if (user.id === interaction.user.id || user.id === client.user.id) {
         return interaction.reply({
           embeds: [makeEmbed("Action unsuccessful", [
-            "This member cannot be timed out. Check role hierarchy and bot permissions."
+            "You cannot timeout yourself or the bot."
           ])],
           flags: MessageFlags.Ephemeral
         });
       }
 
-      await member.timeout(minutes * 60_000, reason);
-      await logAction(interaction, `Timeout (${minutes} minutes)`, user.tag, reason);
+      if (!member.moderatable) {
+        return interaction.reply({
+          embeds: [makeEmbed("Action unsuccessful", [
+            "This member cannot be timed out. Check the bot's permissions and role hierarchy."
+          ])],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      await member.timeout(minutes * 60000, reason);
+      await recordModeration(interaction, `Timeout (${minutes} minutes)`, user, reason);
 
       return interaction.reply({
         embeds: [makeEmbed("Timeout applied", [
@@ -625,17 +643,26 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "kick" || commandName === "ban") {
-      const authorised = commandName === "ban"
+    if (command === "kick" || command === "ban") {
+      const allowed = command === "ban"
         ? hasRole(interaction, "SENIOR_MODERATOR_ROLE_ID")
         : hasRole(interaction, "MODERATOR_ROLE_ID");
 
-      if (!authorised) return interaction.reply(deny());
+      if (!allowed) return interaction.reply(denied());
 
       const user = interaction.options.getUser("member", true);
       const reason = interaction.options.getString("reason", true);
-      const member = await interaction.guild.members.fetch(user.id)
-        .catch(() => null);
+
+      if (user.id === interaction.user.id || user.id === client.user.id) {
+        return interaction.reply({
+          embeds: [makeEmbed("Action unsuccessful", [
+            "You cannot target yourself or the bot."
+          ])],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
 
       if (!member) {
         return interaction.reply({
@@ -646,23 +673,32 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      if (!member.moderatable || (commandName === "kick" && !member.kickable)) {
+      if (command === "kick" && !member.kickable) {
         return interaction.reply({
           embeds: [makeEmbed("Action unsuccessful", [
-            "The bot cannot moderate this member. Check the role hierarchy and bot permissions."
+            "The bot cannot kick this member. Check role hierarchy and permissions."
           ])],
           flags: MessageFlags.Ephemeral
         });
       }
 
-      if (commandName === "kick") await member.kick(reason);
+      if (command === "ban" && !member.bannable) {
+        return interaction.reply({
+          embeds: [makeEmbed("Action unsuccessful", [
+            "The bot cannot ban this member. Check role hierarchy and permissions."
+          ])],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (command === "kick") await member.kick(reason);
       else await member.ban({ reason });
 
-      await logAction(interaction, commandName, user.tag, reason);
+      await recordModeration(interaction, command, user, reason);
 
       return interaction.reply({
         embeds: [makeEmbed("Moderation action completed", [
-          `**Action**\n${commandName}`,
+          `**Action**\n${command}`,
           `**Member**\n${user.tag}`,
           `**Reason**\n${reason}`
         ])],
@@ -670,9 +706,9 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "purge") {
+    if (command === "purge") {
       if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const amount = interaction.options.getInteger("amount", true);
@@ -688,7 +724,14 @@ client.on("interactionCreate", async interaction => {
 
       const deleted = await interaction.channel.bulkDelete(amount, true);
 
-      await logAction(interaction, "Purge", `${deleted.size} messages`, "Bulk message deletion");
+      await sendToChannel("mod-logs", {
+        embeds: [makeEmbed("Moderation record", [
+          "**Action**\nPurge",
+          `**Moderator**\n${interaction.user.tag}`,
+          `**Channel**\n#${interaction.channel.name}`,
+          `**Messages deleted**\n${deleted.size}`
+        ])]
+      }).catch(error => console.error("Purge log failed:", error.message));
 
       return interaction.reply({
         embeds: [makeEmbed("Messages deleted", [
@@ -699,9 +742,9 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "userinfo") {
+    if (command === "userinfo") {
       if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const user = interaction.options.getUser("member", true);
@@ -720,37 +763,41 @@ client.on("interactionCreate", async interaction => {
       });
     }
 
-    if (commandName === "modlogs") {
+    if (command === "modlogs") {
       if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const user = interaction.options.getUser("member");
       const logs = readData("modlogs.json", [])
-        .filter(log => !user || log.target.includes(user.id) || log.target === user.tag)
-        .slice(-10)
+        .filter(entry => !user || entry.userId === user.id)
+        .slice(-8)
         .reverse();
 
       return interaction.reply({
-        embeds: [makeEmbed("Recent moderation records", logs.length
-          ? logs.map(log =>
-              `**${log.action}**\nMember: ${log.target}\nReason: ${log.reason}\n<t:${Math.floor(new Date(log.timestamp).getTime() / 1000)}:R>`
-            )
-          : ["No matching moderation records were found."]
+        embeds: [makeEmbed("Recent moderation records",
+          logs.length
+            ? logs.map(entry =>
+                `**${entry.action}**\n` +
+                `**Member**\n${entry.username} (${entry.userId})\n` +
+                `**Reason**\n${entry.reason}\n` +
+                `**When**\n<t:${Math.floor(new Date(entry.timestamp).getTime() / 1000)}:R>`
+              )
+            : ["No matching records were found."]
         )],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    if (commandName === "staff-report" || commandName === "report") {
+    if (command === "staff-report" || command === "report") {
       const details = interaction.options.getString("details", true);
-      const staff = commandName === "staff-report"
+      const staff = command === "staff-report"
         ? interaction.options.getUser("staff", true)
         : null;
 
-      await sendToChannel(process.env.REPORT_CHANNEL_ID, {
+      await sendToChannel("reports", {
         embeds: [makeEmbed(
-          commandName === "staff-report" ? "Staff conduct report" : "Community report",
+          command === "staff-report" ? "Staff conduct report" : "Community report",
           [
             `**Submitted by**\n<@${interaction.user.id}>`,
             ...(staff ? [`**Staff member reported**\n<@${staff.id}>`] : []),
@@ -761,26 +808,21 @@ client.on("interactionCreate", async interaction => {
 
       return interaction.reply({
         embeds: [makeEmbed("Report submitted", [
-          "Your report has been sent to the designated review team."
+          "Your report has been sent to the review team."
         ])],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    if (commandName === "suggest" || commandName === "feedback") {
-      const isSuggestion = commandName === "suggest";
+    if (command === "suggest" || command === "feedback") {
+      const suggestion = command === "suggest";
       const text = interaction.options.getString(
-        isSuggestion ? "suggestion" : "message",
-        true
+        suggestion ? "suggestion" : "message", true
       );
 
-      const channelId = isSuggestion
-        ? process.env.SUGGESTION_CHANNEL_ID
-        : process.env.FEEDBACK_CHANNEL_ID;
-
-      await sendToChannel(channelId, {
+      await sendToChannel(suggestion ? "suggestions" : "feedback", {
         embeds: [makeEmbed(
-          isSuggestion ? "Community suggestion" : "Community feedback",
+          suggestion ? "Community suggestion" : "Community feedback",
           [
             `**Submitted by**\n<@${interaction.user.id}>`,
             `**Content**\n${text}`
@@ -790,22 +832,22 @@ client.on("interactionCreate", async interaction => {
 
       return interaction.reply({
         embeds: [makeEmbed(
-          isSuggestion ? "Suggestion submitted" : "Feedback submitted",
-          ["Thank you. Your message has been sent for review."]
+          suggestion ? "Suggestion submitted" : "Feedback submitted",
+          ["Your message has been sent for review."]
         )],
         flags: MessageFlags.Ephemeral
       });
     }
 
-    if (commandName === "announce") {
+    if (command === "announce") {
       if (!hasRole(interaction, "SENIOR_MODERATOR_ROLE_ID")) {
-        return interaction.reply(deny());
+        return interaction.reply(denied());
       }
 
       const title = interaction.options.getString("title", true);
       const message = interaction.options.getString("message", true);
 
-      await sendToChannel(process.env.ANNOUNCEMENT_CHANNEL_ID, {
+      await sendToChannel("announcements", {
         embeds: [makeEmbed(title, [
           message,
           `**Published by**\n${interaction.user.tag}`
@@ -819,44 +861,21 @@ client.on("interactionCreate", async interaction => {
         flags: MessageFlags.Ephemeral
       });
     }
-
-    if (commandName === "serverinfo") {
-      const guild = interaction.guild;
-
-      return interaction.reply({
-        embeds: [makeEmbed("Server information", [
-          `**Server**\n${guild.name}`,
-          `**Server ID**\n${guild.id}`,
-          `**Members**\n${guild.memberCount}`,
-          `**Created**\n<t:${Math.floor(guild.createdTimestamp / 1000)}:F>`
-        ])]
-      });
-    }
   } catch (error) {
-    console.error(`Error in /${commandName}:`, error);
+    console.error(`Error in /${command}:`, error);
 
-    const payload = {
+    return replySafely(interaction, {
       embeds: [makeEmbed("Command error", [
-        "The command could not be completed. Check the bot logs and configuration."
+        "The command could not be completed. Check the bot logs and channel configuration."
       ])],
       flags: MessageFlags.Ephemeral
-    };
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.editReply(payload).catch(console.error);
-    } else {
-      await interaction.reply(payload).catch(console.error);
-    }
+    }).catch(console.error);
   }
 });
 
 async function main() {
-  const required = ["DISCORD_TOKEN", "DISCORD_CLIENT_ID"];
-
-  for (const name of required) {
-    if (!process.env[name]) {
-      throw new Error(`${name} is missing from the environment variables.`);
-    }
+  if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CLIENT_ID) {
+    throw new Error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be configured.");
   }
 
   await registerCommands();
