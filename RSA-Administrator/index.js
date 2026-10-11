@@ -32,27 +32,28 @@ const DATA_DIR = path.join(__dirname, "..", "data");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 function readData(filename, fallback = []) {
-  const filepath = path.join(DATA_DIR, filename);
+  const file = path.join(DATA_DIR, filename);
 
-  if (!fs.existsSync(filepath)) {
-    fs.writeFileSync(filepath, JSON.stringify(fallback, null, 2));
+  if (!fs.existsSync(file)) {
+    fs.writeFileSync(file, JSON.stringify(fallback, null, 2));
     return fallback;
   }
 
   try {
-    return JSON.parse(fs.readFileSync(filepath, "utf8"));
+    const result = JSON.parse(fs.readFileSync(file, "utf8"));
+    return Array.isArray(result) ? result : fallback;
   } catch (error) {
-    console.error(`Could not read ${filename}:`, error);
+    console.error(`Failed to read ${filename}:`, error);
     return fallback;
   }
 }
 
-function writeData(filename, value) {
-  const filepath = path.join(DATA_DIR, filename);
-  const tempPath = `${filepath}.tmp`;
+function writeData(filename, data) {
+  const file = path.join(DATA_DIR, filename);
+  const temp = `${file}.tmp`;
 
-  fs.writeFileSync(tempPath, JSON.stringify(value, null, 2));
-  fs.renameSync(tempPath, filepath);
+  fs.writeFileSync(temp, JSON.stringify(data, null, 2));
+  fs.renameSync(temp, file);
 }
 
 function makeEmbed(title, sections = []) {
@@ -60,8 +61,9 @@ function makeEmbed(title, sections = []) {
     .setColor(BRAND_COLOR)
     .setTitle(title)
     .setDescription(
-      sections.filter(Boolean).join("\n\n━━━━━━━━━━━━━━━━━━\n\n") ||
-      "No information available."
+      sections.filter(Boolean).join(
+        "\n\n━━━━━━━━━━━━━━━━━━\n\n"
+      ) || "No information available."
     )
     .setFooter({ text: "London, Uxbridge" })
     .setTimestamp();
@@ -84,6 +86,17 @@ function hasRole(interaction, envName) {
   return interaction.member?.roles?.cache?.has(roleId) ?? false;
 }
 
+function canModerate(interaction) {
+  return (
+    hasRole(interaction, "GROUP_MODERATION_ROLE_ID") ||
+    hasRole(interaction, "GROUP_SENIOR_MODERATION_ROLE_ID")
+  );
+}
+
+function canSeniorModerate(interaction) {
+  return hasRole(interaction, "GROUP_SENIOR_MODERATION_ROLE_ID");
+}
+
 function denied() {
   return {
     embeds: [
@@ -104,7 +117,7 @@ async function getGuild() {
 
   if (guilds.size !== 1) {
     throw new Error(
-      "Set DISCORD_GUILD_ID when the bot is in multiple servers."
+      "Set DISCORD_GUILD_ID if the bot is in multiple servers."
     );
   }
 
@@ -124,9 +137,7 @@ async function sendToChannel(channelName, payload) {
   );
 
   if (!channel) {
-    throw new Error(
-      `Channel #${channelName} was not found in ${guild.name}.`
-    );
+    throw new Error(`Channel #${channelName} was not found.`);
   }
 
   return channel.send(payload);
@@ -158,7 +169,7 @@ async function recordModeration(interaction, action, user, reason) {
       ])
     ]
   }).catch(error => {
-    console.error("Moderation log delivery failed:", error.message);
+    console.error("Could not send moderation log:", error.message);
   });
 }
 
@@ -330,6 +341,46 @@ async function registerCommands() {
 
 const shiftTimers = new Map();
 
+async function finishShift(id) {
+  const shifts = readData("shifts.json", []);
+  const index = shifts.findIndex(s => s.id === id);
+
+  if (index === -1 || shifts[index].ended) return;
+
+  const shift = shifts[index];
+
+  if (shift.endsAt > Date.now()) {
+    scheduleShiftEnd(shift);
+    return;
+  }
+
+  shift.ended = true;
+  shift.endedAt = Date.now();
+  writeData("shifts.json", shifts);
+  shiftTimers.delete(id);
+
+  try {
+    await sendToChannel("staff-shifts", {
+      embeds: [
+        makeEmbed(
+          shift.type === "military"
+            ? "Military operation concluded"
+            : "Shift concluded",
+          [
+            `**Department**\n${shift.department}`,
+            `**Location**\n${shift.location}`,
+            `**Host**\n<@${shift.hostId}>`,
+            `**Duration**\n${shift.duration} minutes`,
+            "The scheduled session has concluded."
+          ]
+        )
+      ]
+    });
+  } catch (error) {
+    console.error("Could not announce activity end:", error.message);
+  }
+}
+
 function scheduleShiftEnd(shift) {
   if (shiftTimers.has(shift.id)) {
     clearTimeout(shiftTimers.get(shift.id));
@@ -353,42 +404,6 @@ function scheduleShiftEnd(shift) {
   }, Math.min(remaining, 2147000000));
 
   shiftTimers.set(shift.id, timer);
-}
-
-async function finishShift(id) {
-  const shifts = readData("shifts.json", []);
-  const index = shifts.findIndex(s => s.id === id);
-
-  if (index === -1 || shifts[index].ended) return;
-
-  const shift = shifts[index];
-
-  if (shift.endsAt > Date.now()) {
-    scheduleShiftEnd(shift);
-    return;
-  }
-
-  shift.ended = true;
-  shift.endedAt = Date.now();
-  writeData("shifts.json", shifts);
-  shiftTimers.delete(id);
-
-  await sendToChannel("staff-shifts", {
-    embeds: [
-      makeEmbed(
-        shift.type === "military"
-          ? "Military operation concluded"
-          : "Shift concluded",
-        [
-          `**Department**\n${shift.department}`,
-          `**Location**\n${shift.location}`,
-          `**Host**\n<@${shift.hostId}>`,
-          `**Duration**\n${shift.duration} minutes`,
-          "The scheduled session has concluded."
-        ]
-      )
-    ]
-  });
 }
 
 function startActivity(type, department, location, hostId, duration) {
@@ -466,7 +481,7 @@ client.on("interactionCreate", async interaction => {
       return interaction.reply({
         embeds: [makeEmbed("Community Relations Office", [
           "Need assistance or want to report a concern?",
-          "Join the Community Relations Office to raise complaints, report staff misconduct and contact the moderation team for London, Uxbridge."
+          "Join the Community Relations Office to raise complaints, report staff misconduct and contact the moderation team."
         ])],
         components: [row]
       });
@@ -486,7 +501,9 @@ client.on("interactionCreate", async interaction => {
         return interaction.reply(denied());
       }
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await interaction.deferReply({
+        flags: MessageFlags.Ephemeral
+      });
 
       const department = interaction.options.getString("department", true);
       const location = interaction.options.getString("location", true);
@@ -518,7 +535,9 @@ client.on("interactionCreate", async interaction => {
         return interaction.reply(denied());
       }
 
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await interaction.deferReply({
+        flags: MessageFlags.Ephemeral
+      });
 
       const operation = interaction.options.getString("operation", true);
       const duration = interaction.options.getInteger("duration") ?? 60;
@@ -549,6 +568,7 @@ client.on("interactionCreate", async interaction => {
       }
 
       const shifts = readData("shifts.json", []);
+
       return interaction.reply({
         embeds: [makeEmbed("Shift statistics", [
           `**Total recorded**\n${shifts.length}`,
@@ -560,7 +580,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "training-session") {
-      if (!hasRole(interaction, "DEPARTMENT_STAFF_ROLE_ID")) {
+      if (!canModerate(interaction)) {
         return interaction.reply(denied());
       }
 
@@ -584,12 +604,24 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "warn") {
-      if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
+      if (
+        !canModerate(interaction) &&
+        !hasRole(interaction, "MODERATOR_IN_TRAINING_ROLE_ID")
+      ) {
         return interaction.reply(denied());
       }
 
       const user = interaction.options.getUser("member", true);
       const reason = interaction.options.getString("reason", true);
+
+      if (user.id === interaction.user.id || user.bot) {
+        return interaction.reply({
+          embeds: [makeEmbed("Action unsuccessful", [
+            "You cannot warn yourself or a bot."
+          ])],
+          flags: MessageFlags.Ephemeral
+        });
+      }
 
       await recordModeration(interaction, "Warning", user, reason);
 
@@ -603,7 +635,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "timeout") {
-      if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
+      if (!canModerate(interaction)) {
         return interaction.reply(denied());
       }
 
@@ -624,14 +656,16 @@ client.on("interactionCreate", async interaction => {
       if (!member.moderatable) {
         return interaction.reply({
           embeds: [makeEmbed("Action unsuccessful", [
-            "This member cannot be timed out. Check the bot's permissions and role hierarchy."
+            "The bot cannot timeout this member. Check permissions and role hierarchy."
           ])],
           flags: MessageFlags.Ephemeral
         });
       }
 
       await member.timeout(minutes * 60000, reason);
-      await recordModeration(interaction, `Timeout (${minutes} minutes)`, user, reason);
+      await recordModeration(
+        interaction, `Timeout (${minutes} minutes)`, user, reason
+      );
 
       return interaction.reply({
         embeds: [makeEmbed("Timeout applied", [
@@ -645,8 +679,8 @@ client.on("interactionCreate", async interaction => {
 
     if (command === "kick" || command === "ban") {
       const allowed = command === "ban"
-        ? hasRole(interaction, "SENIOR_MODERATOR_ROLE_ID")
-        : hasRole(interaction, "MODERATOR_ROLE_ID");
+        ? canSeniorModerate(interaction)
+        : canModerate(interaction);
 
       if (!allowed) return interaction.reply(denied());
 
@@ -662,7 +696,8 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      const member = await interaction.guild.members
+        .fetch(user.id).catch(() => null);
 
       if (!member) {
         return interaction.reply({
@@ -673,10 +708,31 @@ client.on("interactionCreate", async interaction => {
         });
       }
 
+      if (member.id === interaction.guild.ownerId) {
+        return interaction.reply({
+          embeds: [makeEmbed("Action unsuccessful", [
+            "The server owner cannot be moderated by this bot."
+          ])],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
+      if (
+        interaction.member.roles.highest.position <= member.roles.highest.position &&
+        !isAdmin(interaction)
+      ) {
+        return interaction.reply({
+          embeds: [makeEmbed("Action unsuccessful", [
+            "Your highest role must be above the target member's highest role."
+          ])],
+          flags: MessageFlags.Ephemeral
+        });
+      }
+
       if (command === "kick" && !member.kickable) {
         return interaction.reply({
           embeds: [makeEmbed("Action unsuccessful", [
-            "The bot cannot kick this member. Check role hierarchy and permissions."
+            "The bot cannot kick this member. Check its role hierarchy and permissions."
           ])],
           flags: MessageFlags.Ephemeral
         });
@@ -685,14 +741,17 @@ client.on("interactionCreate", async interaction => {
       if (command === "ban" && !member.bannable) {
         return interaction.reply({
           embeds: [makeEmbed("Action unsuccessful", [
-            "The bot cannot ban this member. Check role hierarchy and permissions."
+            "The bot cannot ban this member. Check its role hierarchy and permissions."
           ])],
           flags: MessageFlags.Ephemeral
         });
       }
 
-      if (command === "kick") await member.kick(reason);
-      else await member.ban({ reason });
+      if (command === "kick") {
+        await member.kick(reason);
+      } else {
+        await member.ban({ reason });
+      }
 
       await recordModeration(interaction, command, user, reason);
 
@@ -707,7 +766,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "purge") {
-      if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
+      if (!canModerate(interaction)) {
         return interaction.reply(denied());
       }
 
@@ -731,7 +790,9 @@ client.on("interactionCreate", async interaction => {
           `**Channel**\n#${interaction.channel.name}`,
           `**Messages deleted**\n${deleted.size}`
         ])]
-      }).catch(error => console.error("Purge log failed:", error.message));
+      }).catch(error => {
+        console.error("Purge logging failed:", error.message);
+      });
 
       return interaction.reply({
         embeds: [makeEmbed("Messages deleted", [
@@ -743,12 +804,13 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "userinfo") {
-      if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
+      if (!canModerate(interaction)) {
         return interaction.reply(denied());
       }
 
       const user = interaction.options.getUser("member", true);
-      const member = await interaction.guild.members.fetch(user.id).catch(() => null);
+      const member = await interaction.guild.members
+        .fetch(user.id).catch(() => null);
 
       return interaction.reply({
         embeds: [makeEmbed("Member information", [
@@ -764,7 +826,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "modlogs") {
-      if (!hasRole(interaction, "MODERATOR_ROLE_ID")) {
+      if (!canModerate(interaction)) {
         return interaction.reply(denied());
       }
 
@@ -781,7 +843,9 @@ client.on("interactionCreate", async interaction => {
                 `**${entry.action}**\n` +
                 `**Member**\n${entry.username} (${entry.userId})\n` +
                 `**Reason**\n${entry.reason}\n` +
-                `**When**\n<t:${Math.floor(new Date(entry.timestamp).getTime() / 1000)}:R>`
+                `**When**\n<t:${Math.floor(
+                  new Date(entry.timestamp).getTime() / 1000
+                )}:R>`
               )
             : ["No matching records were found."]
         )],
@@ -797,7 +861,9 @@ client.on("interactionCreate", async interaction => {
 
       await sendToChannel("reports", {
         embeds: [makeEmbed(
-          command === "staff-report" ? "Staff conduct report" : "Community report",
+          command === "staff-report"
+            ? "Staff conduct report"
+            : "Community report",
           [
             `**Submitted by**\n<@${interaction.user.id}>`,
             ...(staff ? [`**Staff member reported**\n<@${staff.id}>`] : []),
@@ -815,24 +881,28 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "suggest" || command === "feedback") {
-      const suggestion = command === "suggest";
-      const text = interaction.options.getString(
-        suggestion ? "suggestion" : "message", true
+      const isSuggestion = command === "suggest";
+      const content = interaction.options.getString(
+        isSuggestion ? "suggestion" : "message",
+        true
       );
 
-      await sendToChannel(suggestion ? "suggestions" : "feedback", {
-        embeds: [makeEmbed(
-          suggestion ? "Community suggestion" : "Community feedback",
-          [
-            `**Submitted by**\n<@${interaction.user.id}>`,
-            `**Content**\n${text}`
-          ]
-        )]
-      });
+      await sendToChannel(
+        isSuggestion ? "suggestions" : "feedback",
+        {
+          embeds: [makeEmbed(
+            isSuggestion ? "Community suggestion" : "Community feedback",
+            [
+              `**Submitted by**\n<@${interaction.user.id}>`,
+              `**Content**\n${content}`
+            ]
+          )]
+        }
+      );
 
       return interaction.reply({
         embeds: [makeEmbed(
-          suggestion ? "Suggestion submitted" : "Feedback submitted",
+          isSuggestion ? "Suggestion submitted" : "Feedback submitted",
           ["Your message has been sent for review."]
         )],
         flags: MessageFlags.Ephemeral
@@ -840,7 +910,7 @@ client.on("interactionCreate", async interaction => {
     }
 
     if (command === "announce") {
-      if (!hasRole(interaction, "SENIOR_MODERATOR_ROLE_ID")) {
+      if (!canSeniorModerate(interaction)) {
         return interaction.reply(denied());
       }
 
@@ -875,7 +945,9 @@ client.on("interactionCreate", async interaction => {
 
 async function main() {
   if (!process.env.DISCORD_TOKEN || !process.env.DISCORD_CLIENT_ID) {
-    throw new Error("DISCORD_TOKEN and DISCORD_CLIENT_ID must be configured.");
+    throw new Error(
+      "DISCORD_TOKEN and DISCORD_CLIENT_ID must be configured."
+    );
   }
 
   await registerCommands();
