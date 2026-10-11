@@ -1,17 +1,15 @@
-
 {
-  "name": "london-uxbridge-bot",
-  "version": "1.0.0",
-  "description": "Official community bot for London, Uxbridge",
-  "main": "src/index.js",
-  "scripts": {
-    "start": "node src/index.js"
-  },
-  "engines": {
-    "node": ">=20"
-  },
-  "dependencies": {
-    "discord.js": "^14.19.3",
-    "dotenv": "^16.4.7"
-  }
+"name": "london-uxbridge-bot",
+"version": "1.0.0",
+"description": "London, Uxbridge Roblox roleplay community bot",
+"main": "index.js",
+"scripts": {
+"start": "node index.js"
+},
+"engines": {
+"node": ">=20"
+},
+"dependencies": {
+"discord.js": "^14.19.3"
+}
 }
